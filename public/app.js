@@ -201,10 +201,10 @@
       .bindTooltip('Gare du Midi', { permanent: true, direction: 'left', offset: [-8, 0], className: 'pin-lbl' }).addTo(map);
     V.forEach((v, i) => {
       const m = L.marker([v.lat, v.lng], {
-        icon: L.divIcon({ className: '', html: '<div class="pin k-' + v.k + (v.approx ? ' approx' : '') + '" data-id="' + v.id + '">' + (i + 1) + '</div>', iconSize: [26, 26], iconAnchor: [13, 13] }),
+        icon: L.divIcon({ className: '', html: '<div class="pin-hit"><div class="pin k-' + v.k + (v.approx ? ' approx' : '') + '" data-id="' + v.id + '">' + (i + 1) + '</div></div>', iconSize: [44, 44], iconAnchor: [22, 22] }),
         title: v.n, alt: v.n, riseOnHover: true,
       }).addTo(map);
-      m.bindTooltip(v.n.replace(' & La Fabriek', ''), { permanent: true, direction: 'right', offset: [14, 0], className: 'pin-lbl' });
+      m.bindTooltip(v.n.replace(' & La Fabriek', ''), { permanent: true, direction: 'right', offset: [24, 0], className: 'pin-lbl' });
       m.on('click', () => select(v.id, false));
       venueMarkers[v.id] = m;
     });
@@ -237,12 +237,12 @@
       if (m.id === me.id || !m.sharing || !m.pos) continue;
       live.add(m.id);
       const old = ageSec(m.pos.t) > 180;
-      const icon = L.divIcon({ className: '', html: '<div class="friend' + (old ? ' old' : '') + '" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</div>', iconSize: [34, 34], iconAnchor: [17, 17] });
+      const icon = L.divIcon({ className: '', html: '<div class="pin-hit"><div class="friend' + (old ? ' old' : '') + '" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</div></div>', iconSize: [44, 44], iconAnchor: [22, 22] });
       const tip = '<span class="fl" style="background:' + esc(m.color) + '">' + esc(m.pseudo) + '</span>';
       let mk = friendMarkers[m.id];
       if (!mk) {
         mk = L.marker([m.pos.lat, m.pos.lng], { icon, zIndexOffset: 800, title: m.pseudo, alt: m.pseudo }).addTo(map);
-        mk.bindTooltip(tip, { permanent: true, direction: 'top', offset: [0, -18], className: 'friend-lbl' });
+        mk.bindTooltip(tip, { permanent: true, direction: 'top', offset: [0, -24], className: 'friend-lbl' });
         mk.on('click', () => { fitMember(m.id); });
         friendMarkers[m.id] = mk;
       } else { mk.setLatLng([m.pos.lat, m.pos.lng]); mk.setIcon(icon); mk.setTooltipContent(tip); }
@@ -685,6 +685,12 @@
   });
   $('#quick').innerHTML = QUICK.map(q => '<button type="button">' + esc(q) + '</button>').join('');
   $('#quick').addEventListener('click', e => { const b = e.target.closest('button'); if (b) send(b.textContent); });
+
+  // Clavier ouvert sur téléphone : les onglets laissent la place à la zone de saisie
+  $('#msg-in').addEventListener('focus', () => { document.body.classList.add('kb'); scrollMsgs(true); });
+  $('#msg-in').addEventListener('blur', () => document.body.classList.remove('kb'));
+  // Sur téléphone, toucher les messages referme le clavier et ramène les onglets
+  $('#msgs').addEventListener('pointerdown', () => { if (matchMedia('(pointer: coarse)').matches) $('#msg-in').blur(); });
 
   // ---------- Profil ----------
   function renderMeChip() {

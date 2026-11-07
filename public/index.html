@@ -2,9 +2,15 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Plan Listen 2026</title>
-<meta name="theme-color" content="#0e1012">
+<meta name="theme-color" content="#0e1012" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f1f2f3" media="(prefers-color-scheme: light)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Listen 26">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -46,8 +52,10 @@
       <div class="map-wrap">
         <div id="map" role="application" aria-label="Carte des lieux et de vos potes"></div>
         <div class="map-ctl">
-          <button class="chip big" id="btn-share" type="button" aria-pressed="false">Partager ma position</button>
           <div class="chips" id="zoom" role="group" aria-label="Zoom"></div>
+        </div>
+        <div class="map-share">
+          <button class="chip big" id="btn-share" type="button" aria-pressed="false">Partager ma position</button>
         </div>
         <div class="map-fab">
           <button class="fab" id="btn-locate" type="button" aria-label="Me centrer sur la carte">Moi</button>

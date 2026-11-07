@@ -16,6 +16,10 @@ Puis ouvrir http://localhost:3000. Le premier arrivé choisit un pseudo et une c
 
 Sans `GROUP_CODE`, le code de test est `listen`.
 
+## Sur téléphone
+
+Le site est pensé pour le téléphone d'abord (cibles tactiles de 44 px minimum, carte pleine largeur, onglets en bas). Une fois en ligne, ouvrez-le dans Safari ou Chrome puis « Ajouter à l'écran d'accueil » : il s'ouvre en plein écran comme une appli, avec son icône.
+
 ## Tester
 
 ```powershell
