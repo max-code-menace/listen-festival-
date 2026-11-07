@@ -1,0 +1,13 @@
+{
+  "name": "listen-festival",
+  "version": "1.0.0",
+  "description": "Plan Listen Festival 2026 : carte, parcours, messages et positions pour un groupe de potes.",
+  "private": true,
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  }
+}

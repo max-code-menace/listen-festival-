@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plan Listen 2026</title>
+<meta name="theme-color" content="#0e1012">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Entrée dans le groupe -->
+<main id="login" class="login" hidden>
+  <form id="login-form" class="login-card" autocomplete="off">
+    <p class="label">Bruxelles · 21 → 22 nov. 2026</p>
+    <h1>Plan Listen</h1>
+    <p class="mute">Le groupe, la carte et le chat, au même endroit. Entrez le code que vous a donné la personne qui a lancé le groupe.</p>
+    <div class="field"><label class="label" for="in-code">Code du groupe</label><input id="in-code" name="code" type="text" required autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    <div class="field"><label class="label" for="in-pseudo">Ton pseudo</label><input id="in-pseudo" name="pseudo" type="text" required maxlength="16" autocomplete="nickname"></div>
+    <div class="field"><span class="label" id="color-l">Ta couleur sur la carte</span><div class="swatches" id="swatches" role="radiogroup" aria-labelledby="color-l"></div></div>
+    <p class="err" id="login-err" role="alert" hidden></p>
+    <button class="btn main big" type="submit">Entrer</button>
+  </form>
+</main>
+
+<!-- Application -->
+<div id="app" hidden>
+  <header class="bar">
+    <div class="bar-title">
+      <b>Plan Listen</b>
+      <span class="mono mute" id="countdown">J-…</span>
+    </div>
+    <div class="bar-right">
+      <span class="status" id="conn" title="Connexion au groupe"><i></i><span id="conn-txt">Connexion…</span></span>
+      <button class="me-chip" id="me-chip" type="button" aria-haspopup="dialog"></button>
+    </div>
+  </header>
+
+  <main>
+    <!-- CARTE -->
+    <section class="view" id="v-carte" data-view="carte">
+      <div class="map-wrap">
+        <div id="map" role="application" aria-label="Carte des lieux et de vos potes"></div>
+        <div class="map-ctl">
+          <button class="chip big" id="btn-share" type="button" aria-pressed="false">Partager ma position</button>
+          <div class="chips" id="zoom" role="group" aria-label="Zoom"></div>
+        </div>
+        <div class="map-fab">
+          <button class="fab" id="btn-locate" type="button" aria-label="Me centrer sur la carte">Moi</button>
+          <button class="fab" id="btn-fit" type="button" aria-label="Voir tout le groupe">Tous</button>
+          <button class="fab" id="btn-rdv" type="button" aria-pressed="false" aria-label="Poser un point de rendez-vous">RDV</button>
+        </div>
+        <p class="map-hint" id="map-hint" hidden></p>
+      </div>
+      <div class="duo">
+        <div class="stack">
+          <section class="card" aria-labelledby="potes-t">
+            <div class="card-head"><h3 id="potes-t">Les potes</h3><span class="mute small" id="potes-n"></span></div>
+            <ul class="potes" id="potes"></ul>
+          </section>
+          <form class="card rdv-form" id="rdv-form" hidden>
+            <h3>Point de rendez-vous</h3>
+            <div class="field"><label class="label" for="rdv-txt">Nom du rendez-vous</label><input id="rdv-txt" type="text" maxlength="60" value="RDV ici"></div>
+            <div class="links"><button class="btn main" type="submit">Envoyer au groupe</button><button class="btn" type="button" id="rdv-cancel">Annuler</button></div>
+          </form>
+        </div>
+        <div class="stack">
+          <article class="card venue" id="venue" aria-live="polite"></article>
+          <section class="card" id="route-card" aria-labelledby="route-t">
+            <div class="card-head"><h3 id="route-t">Itinéraire à pied</h3><span class="mute small">calculé dans le site</span></div>
+            <div class="route-form">
+              <div class="field"><label class="label" for="r-from">De</label><select id="r-from"></select></div>
+              <div class="field"><label class="label" for="r-to">Vers</label><select id="r-to"></select></div>
+              <button class="btn main" id="r-go" type="button">Calculer</button>
+            </div>
+            <div id="route-out" aria-live="polite"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAN -->
+    <section class="view" id="v-plan" data-view="plan" hidden>
+      <div class="sec-head"><h2>Qui ouvre quand</h2><p class="mute">Touchez un lieu pour le voir sur la carte.</p></div>
+      <div class="scroll-x"><div class="frise" id="frise-grid"></div></div>
+      <div class="fr-legend">
+        <span><i class="sw k-club"></i>Club de nuit</span>
+        <span><i class="sw k-jour"></i>Club, ouvert en journée</span>
+        <span><i class="sw k-disq"></i>Disquaire (Vedett LISTENing Sessions)</span>
+        <span><i class="sw k-rail"></i>Listen Express</span>
+        <span><i class="sw k-tbc"></i>Fin à confirmer</span>
+        <span><i class="sw" style="box-shadow:0 0 0 2px var(--fg)"></i>Étape du parcours</span>
+      </div>
+
+      <div class="sec-head" style="margin-top:36px"><h2>Parcours proposé</h2><p class="mute">Hexagon → Nord → train → Fuse</p></div>
+      <div class="field"><label class="label" for="depart">Ta gare de départ</label><input id="depart" type="text" autocomplete="off" value="Gare de Mont-Saint-Guibert"></div>
+      <ol class="steps" id="steps"></ol>
+      <p class="aside" id="hors-parcours"></p>
+
+      <div class="sec-head" style="margin-top:36px"><h2>Listen Express</h2></div>
+      <div class="express">
+        <div class="stations" aria-label="Gares desservies"><span>Nord</span><i></i><span>Central</span><i></i><span>Midi</span></div>
+        <div class="facts">
+          <div><span class="label">Quand</span><span class="mono">dim. 00:00 → 05:00</span></div>
+          <div><span class="label">Aux platines</span><span>O'SIMMIE, LOV, Vera Moro</span></div>
+          <div><span class="label">Billet</span><span>Inclus dans le billet du festival</span></div>
+          <div><span class="label">Horaire des passages</span><span>Pas encore publié</span></div>
+        </div>
+        <p>Une voiture devient une piste de danse, avec un bar, entre les trois gares. Étape 3 du parcours : monter à Nord vers minuit, descendre à Midi.</p>
+      </div>
+
+      <div class="sec-head" style="margin-top:36px"><h2>Limites connues</h2></div>
+      <ul class="plain">
+        <li>Les heures de passage par DJ ne sont pas publiées : le plan est calé sur les horaires des lieux.</li>
+        <li>Studio CityGate &amp; La Fabriek est affiché « 23:00 - 23:00 » sur le site : barre hachurée jusqu'à la fin, à confirmer.</li>
+        <li>Les itinéraires du site sont à pied. Les trains (SNCB, Listen Express) ne sont pas calculés : leurs horaires de nuit ne sont pas vérifiés.</li>
+        <li>Congrès Station : position approximative. Les autres lieux viennent d'OpenStreetMap.</li>
+        <li>Billets : Resident Advisor les affichait épuisés. Billetterie officielle : <a href="https://feverup.com/m/742369/en" target="_blank" rel="noopener">Fever</a>.</li>
+        <li>Aucun de tes artistes préférés (Part Time Killer, David Löhlein, Schrotagen, Miss Hluft, Elon Bass, Nio Teck, Jacidorex, NoImage) n'est à l'affiche.</li>
+      </ul>
+      <p class="mute small">Source : listenfestival.be, relevé du 07/11/2026. Fond de carte et itinéraires : © contributeurs OpenStreetMap.</p>
+    </section>
+
+    <!-- LINE-UP -->
+    <section class="view" id="v-lineup" data-view="lineup" hidden>
+      <div class="sec-head">
+        <h2>Line-up par lieu</h2>
+        <div class="seg" role="group" aria-label="Filtrer le line-up" id="filter">
+          <button type="button" data-f="all" aria-pressed="true">Tout</button>
+          <button type="button" data-f="gouts" aria-pressed="false">Mes goûts</button>
+          <button type="button" data-f="stars" aria-pressed="false">J'y vais</button>
+          <button type="button" data-f="crew" aria-pressed="false">Le groupe</button>
+        </div>
+      </div>
+      <p class="mute">Les heures de passage de chaque DJ ne sont pas encore publiées : seul l'horaire du lieu est connu. Les pastilles de couleur montrent qui du groupe y va.</p>
+      <div class="lu-grid" id="lu"></div>
+    </section>
+
+    <!-- CHAT -->
+    <section class="view chat" id="v-chat" data-view="chat" hidden>
+      <ol class="msgs" id="msgs" aria-live="polite"></ol>
+      <div class="quick" id="quick"></div>
+      <form class="composer" id="composer" autocomplete="off">
+        <label class="sr" for="msg-in">Message pour le groupe</label>
+        <input id="msg-in" type="text" maxlength="400" placeholder="Un message pour le groupe…" enterkeyhint="send">
+        <button class="btn main" type="submit">Envoyer</button>
+      </form>
+    </section>
+  </main>
+
+  <nav class="tabs" aria-label="Sections">
+    <button type="button" data-tab="carte" aria-current="page">Carte</button>
+    <button type="button" data-tab="plan">Plan</button>
+    <button type="button" data-tab="lineup">Line-up</button>
+    <button type="button" data-tab="chat">Chat<b class="badge" id="badge" hidden>0</b></button>
+  </nav>
+
+  <dialog id="me-dialog" class="dialog">
+    <form method="dialog" class="dlg-body">
+      <h3 id="me-name"></h3>
+      <p class="mute small" id="me-info"></p>
+      <div class="links">
+        <button class="btn main" id="me-invite" type="button">Copier le lien d'invitation</button>
+        <button class="btn" id="me-leave" type="button">Quitter le groupe</button>
+        <button class="btn" value="close">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+</div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/data.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
