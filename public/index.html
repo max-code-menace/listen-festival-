@@ -132,17 +132,22 @@
 
     <!-- LINE-UP -->
     <section class="view" id="v-lineup" data-view="lineup" hidden>
-      <div class="sec-head">
-        <h2>Line-up par lieu</h2>
+      <div class="sec-head"><h2>Line-up</h2></div>
+      <div class="seg" role="group" aria-label="Affichage du line-up" id="lu-mode">
+        <button type="button" data-m="lieux" aria-pressed="true">Par lieu</button>
+        <button type="button" data-m="potes" aria-pressed="false">Par pote</button>
+      </div>
+      <div class="lu-wrap" id="lu-lieux">
         <div class="seg" role="group" aria-label="Filtrer le line-up" id="filter">
           <button type="button" data-f="all" aria-pressed="true">Tout</button>
           <button type="button" data-f="gouts" aria-pressed="false">Mes goûts</button>
           <button type="button" data-f="stars" aria-pressed="false">J'y vais</button>
           <button type="button" data-f="crew" aria-pressed="false">Le groupe</button>
         </div>
+        <p class="mute">Les heures de passage de chaque DJ ne sont pas encore publiées : seul l'horaire du lieu est connu. Les pastilles de couleur montrent qui du groupe y va.</p>
+        <div class="lu-grid" id="lu"></div>
       </div>
-      <p class="mute">Les heures de passage de chaque DJ ne sont pas encore publiées : seul l'horaire du lieu est connu. Les pastilles de couleur montrent qui du groupe y va.</p>
-      <div class="lu-grid" id="lu"></div>
+      <div class="lu-grid" id="lu-potes" hidden></div>
     </section>
 
     <!-- CHAT -->

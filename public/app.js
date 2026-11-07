@@ -386,13 +386,16 @@
         const near = nearestPlace(m.pos), dist = myPos ? ' · à ' + fmtDist(km(myPos, m.pos) * 1000) + ' de toi' : '';
         sub = '<span class="live' + (ageSec(m.pos.t) > 180 ? ' off' : '') + '"></span>' + ageText(m.pos.t) + (near ? ' · près de ' + esc(near) : '') + dist;
       } else sub = '<span class="live off"></span>' + (m.online ? 'en ligne, position non partagée' : 'hors ligne');
+      const n = (m.stars || []).length;
+      const planBtn = n ? '<br><button class="link" type="button" data-act="plan" data-id="' + m.id + '">Son planning · ' + n + ' DJ</button>' : '';
       const acts = m.sharing && m.pos ? '<button class="btn" type="button" data-act="see" data-id="' + m.id + '">Voir</button><button class="btn" type="button" data-act="go" data-id="' + m.id + '">Y aller</button>' : '';
-      return '<li class="pote"><span class="dot" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</span><div><b>' + esc(m.pseudo) + '</b><div class="sub">' + sub + '</div></div><div class="acts">' + acts + '</div></li>';
+      return '<li class="pote"><span class="dot" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</span><div><b>' + esc(m.pseudo) + '</b><div class="sub">' + sub + planBtn + '</div></div><div class="acts">' + acts + '</div></li>';
     }).join('');
   }
   $('#potes').addEventListener('click', e => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     if (b.dataset.act === 'see') fitMember(b.dataset.id);
+    if (b.dataset.act === 'plan') openCrewPlan(b.dataset.id);
     if (b.dataset.act === 'go') routeBetween(myPos ? 'me' : null, 'f:' + b.dataset.id);
   });
   setInterval(() => { if (me && !$('#app').hidden) { renderPotes(); syncFriendMarkers(); } }, 20000);
@@ -565,7 +568,7 @@
       const st = r.id === 'express' ? 0 : starsAt(r.id);
       const lab = hh(r.s) + '–' + (r.k === 'tbc' ? '?' : hh(r.e));
       html += '<div class="fr-row' + (r.id === sel ? ' sel' : '') + '"><button type="button" class="fr-name" data-go="' + r.id + '"><span>' + esc(r.n) + '</span>' +
-        (st ? '<span class="mono" title="DJ choisis">★' + st + '</span>' : '') + '</button><div class="fr-track">' + nowLine +
+        (r.id === 'express' ? '' : miniCrew(r.id)) + '</button><div class="fr-track">' + nowLine +
         '<button type="button" class="fr-bar k-' + r.k + (onRoute(r.id) ? ' route' : '') + '" data-go="' + r.id + '" style="left:' + pct(r.s) + '%;width:' + (pct(r.e) - pct(r.s)) + '%;--i:' + i + '" aria-label="' +
         esc(r.n) + ' : ' + fmtH(r.s) + ' à ' + (r.k === 'tbc' ? 'fin à confirmer' : fmtH(r.e)) + '">' + lab + '</button></div></div>';
     }
@@ -611,7 +614,10 @@
   $('#depart').addEventListener('input', () => { store.set('l26.depart', $('#depart').value); renderSteps(); });
 
   // ---------- Line-up ----------
+  let luMode = 'lieux';
   function renderLineup() {
+    $('#lu-lieux').hidden = luMode !== 'lieux'; $('#lu-potes').hidden = luMode !== 'potes';
+    if (luMode === 'potes') return renderCrewPlan();
     const cards = V.map(v => {
       const list = v.ar.filter(a => {
         const k = starKey(v.id, a);
@@ -632,6 +638,62 @@
     const b = e.target.closest('[data-f]'); if (!b) return;
     filter = b.dataset.f; $$('#filter button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderLineup();
   });
+
+  // ---------- Le planning de chacun ----------
+  function picksOf(m) {
+    const keys = m.id === me.id ? [...myStars] : (m.stars || []);
+    const out = [];
+    for (const k of keys) {
+      const [vid, ...rest] = k.split('|'), v = byId(vid), a = rest.join('|');
+      if (v && v.ar.includes(a)) out.push({ v, a, k });
+    }
+    return out.sort((x, y) => (x.v.s - y.v.s) || (V.indexOf(x.v) - V.indexOf(y.v)) || (x.v.ar.indexOf(x.a) - y.v.ar.indexOf(y.a)));
+  }
+  const whoGoesAt = vid => [...members.values()].filter(m => picksOf(m).some(p => p.v.id === vid));
+  function miniCrew(vid) {
+    const w = whoGoesAt(vid);
+    if (!w.length) return '';
+    return '<span class="minis" title="' + esc(w.map(m => m.id === me.id ? 'toi' : m.pseudo).join(', ')) + '">' +
+      w.slice(0, 3).map(m => '<span class="dot mini" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</span>').join('') +
+      (w.length > 3 ? '<span class="more">+' + (w.length - 3) + '</span>' : '') + '</span>';
+  }
+  const names = list => { const n = list.map(m => (m.id === me.id ? 'toi' : m.pseudo)); return n.length < 2 ? n.join('') : n.slice(0, -1).join(', ') + ' et ' + n[n.length - 1]; };
+  const hoursOf = v => hh(v.s) + '–' + (v.tbc ? '?' : hh(v.e));
+  function renderCrewPlan() {
+    const list = [...members.values()].sort((a, b) => ((b.id === me.id) - (a.id === me.id)) || (picksOf(b).length - picksOf(a).length) || a.pseudo.localeCompare(b.pseudo));
+    const meet = V.map(v => ({ v, who: whoGoesAt(v.id) })).filter(x => x.who.length >= 2).sort((a, b) => (b.who.length - a.who.length) || (a.v.s - b.v.s));
+    let html = '<section class="card meet" style="grid-column:1/-1"><div class="card-head"><h3>Où vous vous retrouvez</h3><span class="mute small">au moins 2 personnes</span></div>' +
+      (meet.length ? '<ul class="meet-list">' + meet.map(x => '<li><button type="button" class="pl-vn" data-sel="' + x.v.id + '">' + esc(x.v.n) + '</button><span class="pl-h">' + hoursOf(x.v) + '</span>' +
+        '<span class="meet-who">' + crewDots(x.who) + ' ' + esc(names(x.who)) + '</span></li>').join('') + '</ul>'
+        : '<p class="empty">Personne n’a encore choisi le même lieu. Choisissez des DJ avec « J’y vais » : vous verrez ici où vous retrouver.</p>') + '</section>';
+    for (const m of list) {
+      const picks = picksOf(m), isMe = m.id === me.id, venues = [...new Set(picks.map(p => p.v.id))];
+      let body = '';
+      if (!picks.length) body = '<p class="empty">' + (isMe ? 'Tu n’as encore rien choisi. Touche « J’y vais » à côté d’un DJ, dans « Par lieu ».' : esc(m.pseudo) + ' n’a encore rien choisi.') + '</p>';
+      for (const vid of venues) {
+        const v = byId(vid);
+        body += '<div class="pl-v"><button type="button" class="pl-vn" data-sel="' + v.id + '">' + esc(v.n) + '</button><span class="pl-h">' + hoursOf(v) + '</span></div><ul class="artists">' +
+          picks.filter(p => p.v.id === vid).map(p => {
+            if (isMe) return artistLi(v, p.a);
+            const t = tagOf(p.a), also = myStars.has(p.k);
+            return '<li class="' + (t === 'skip' ? 'a-skip' : '') + '"><span class="a-name"><b>' + esc(p.a) + '</b><span class="a-meta">' + (t ? '<span class="tag t-' + t + '">' + TAG_TXT[t] + '</span>' : '') + (also ? '<span class="tag t-also">Toi aussi</span>' : '') + '</span></span></li>';
+          }).join('') + '</ul>';
+      }
+      html += '<article class="card pl" id="pl-' + m.id + '"><div class="pl-head"><span class="dot" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</span><div><b>' + esc(isMe ? m.pseudo + ' (toi)' : m.pseudo) + '</b>' +
+        '<div class="pl-sub">' + picks.length + (picks.length > 1 ? ' DJ' : ' DJ') + ' · ' + venues.length + (venues.length > 1 ? ' lieux' : ' lieu') + '</div></div></div>' + body + '</article>';
+    }
+    $('#lu-potes').innerHTML = html;
+  }
+  $('#lu-mode').addEventListener('click', e => {
+    const b = e.target.closest('[data-m]'); if (!b) return;
+    luMode = b.dataset.m; $$('#lu-mode button').forEach(x => x.setAttribute('aria-pressed', x === b)); renderLineup();
+  });
+  $('#lu-potes').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b) select(b.dataset.sel, true); });
+  function openCrewPlan(id) {
+    luMode = 'potes'; $$('#lu-mode button').forEach(x => x.setAttribute('aria-pressed', x.dataset.m === 'potes'));
+    showTab('lineup'); renderLineup();
+    const el = document.getElementById('pl-' + id); if (el) el.scrollIntoView({ block: 'start', behavior: smooth() });
+  }
 
   // ---------- Chat ----------
   function markRead() {

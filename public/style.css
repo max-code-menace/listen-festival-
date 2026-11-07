@@ -282,6 +282,27 @@ main { max-width: 1120px; margin: 0 auto; padding: 16px var(--gx-r) calc(var(--t
 .lu-card header button { border: 0; background: none; padding: 0; min-height: 44px; min-width: 44px; text-align: left; font: 700 1.02rem/1.2 var(--f-display); }
 .lu-card header button:hover { text-decoration: underline; }
 
+.lu-wrap { display: grid; gap: 16px; min-width: 0; }
+
+/* Planning de chacun */
+.pl-head { display: flex; align-items: center; gap: 12px; }
+.pl-head .dot { width: 42px; height: 42px; font-size: 1rem; }
+.pl-head b { font: 700 1.05rem/1.2 var(--f-display); }
+.pl-sub { font-size: .8rem; color: var(--mute); margin-top: 2px; }
+.pl-v { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 4px; }
+.pl-vn { border: 0; background: none; padding: 0; min-height: 44px; min-width: 44px; text-align: left; font: 700 .95rem/1.2 var(--f-display); color: var(--accent); }
+.pl-vn:hover { text-decoration: underline; }
+.pl-h { font-size: .78rem; color: var(--mute); white-space: nowrap; }
+.t-also { color: var(--pink); }
+.meet-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.meet-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; padding: 4px 0; border-top: 1px solid rgba(255, 255, 255, .1); }
+.meet-list li:first-child { border-top: 0; }
+.meet-who { grid-column: 1 / -1; font-size: .85rem; color: #e4defa; padding-bottom: 8px; }
+.link { border: 0; background: none; padding: 0; min-height: 44px; display: inline-flex; align-items: center; color: var(--accent); font: 700 .82rem/1 var(--f-body); text-decoration: underline; text-underline-offset: 3px; }
+.minis { display: inline-flex; align-items: center; flex: none; padding-left: 5px; }
+.dot.mini { width: 16px; height: 16px; margin-left: -5px; border: 1.5px solid #1f1340; font-size: .5rem; }
+.minis .more { margin-left: 3px; font-size: .62rem; color: var(--mute); }
+
 /* Express, listes */
 .express { border-radius: 26px; padding: 18px; display: grid; gap: 16px; }
 .stations { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 700 .95rem/1 var(--f-display); }
