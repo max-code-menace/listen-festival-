@@ -165,6 +165,7 @@
     tab = name;
     $$('.view').forEach(v => { v.hidden = v.dataset.view !== name; });
     $$('.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === name ? 'page' : 'false'));
+    const ind = $('.tabs .ind'); if (ind) ind.style.transform = 'translateX(' + ['carte', 'plan', 'lineup', 'chat'].indexOf(name) * 100 + '%)';
     if (push) { try { history.replaceState(null, '', '#' + name); } catch (e) { /* ignoré */ } }
     if (name === 'carte' && map) {
       map.invalidateSize();
@@ -289,7 +290,7 @@
   });
   function renderShareBtn() {
     const b = $('#btn-share'); b.setAttribute('aria-pressed', sharing);
-    b.textContent = sharing ? 'Je partage ma position · arrêter' : 'Partager ma position';
+    b.innerHTML = '<span class="dot"></span>' + (sharing ? 'Tu partages · arrêter' : 'Partager ma position');
   }
   function startShare() {
     if (!navigator.geolocation) return hint('Ce navigateur ne donne pas la position.');
@@ -508,9 +509,9 @@
   function drawRoute(geo, a, b) {
     clearRoute();
     routeLayer = L.layerGroup([
-      L.polyline(geo, { color: '#fff', weight: 10, opacity: .9, interactive: false }),
-      L.polyline(geo, { color: '#3d8bff', weight: 5, opacity: 1, interactive: false }),
-      L.circleMarker([b.lat, b.lng], { radius: 7, color: '#fff', weight: 3, fillColor: '#3d8bff', fillOpacity: 1, interactive: false }),
+      L.polyline(geo, { color: '#0b0714', weight: 11, opacity: .6, interactive: false }),
+      L.polyline(geo, { color: '#3ee6d8', weight: 5, opacity: 1, interactive: false, className: 'route-line' }),
+      L.circleMarker([b.lat, b.lng], { radius: 7, color: '#fff', weight: 3, fillColor: '#3ee6d8', fillOpacity: 1, interactive: false }),
     ]).addTo(map);
     map.flyToBounds(L.latLngBounds(geo), { padding: [50, 50], maxZoom: 18, duration: reduced() ? 0 : .6 });
   }
@@ -529,7 +530,7 @@
         '<p class="small mute">' + esc(a.n) + ' → ' + esc(b.n) + '</p>' +
         '<ol class="dirs">' + steps.map(s => '<li><span>' + esc(dirText(s)) + '</span><span class="d">' + (s.distance ? fmtDist(s.distance) : '') + '</span></li>').join('') + '</ol>';
     } catch (err) {
-      const line = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: '#3d8bff', weight: 4, dashArray: '4 8', interactive: false });
+      const line = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: '#3ee6d8', weight: 4, dashArray: '4 8', interactive: false });
       clearRoute(); routeLayer = L.layerGroup([line]).addTo(map);
       out.innerHTML = '<p class="err">Impossible de calculer le trajet (réseau ou service indisponible).</p><p class="mute">À vol d’oiseau : ' + fmtDist(km(a, b) * 1000) + ' (≈ ' + fmtDur(km(a, b) * 1000 * 1.35 / 1.3) + ' à pied).</p>';
     }
@@ -560,12 +561,12 @@
     const nowLine = h > H0 && h < H1 ? '<i class="fr-now" style="left:' + pct(h) + '%" title="Maintenant"></i>' : '';
     const rows = V.map(v => ({ id: v.id, n: v.n, s: v.s, e: v.e, k: v.tbc ? 'tbc' : v.k }));
     rows.splice(6, 0, { id: 'express', n: EXPRESS.n, s: EXPRESS.s, e: EXPRESS.e, k: 'rail' });
-    for (const r of rows) {
+    for (const [i, r] of rows.entries()) {
       const st = r.id === 'express' ? 0 : starsAt(r.id);
       const lab = hh(r.s) + '–' + (r.k === 'tbc' ? '?' : hh(r.e));
       html += '<div class="fr-row' + (r.id === sel ? ' sel' : '') + '"><button type="button" class="fr-name" data-go="' + r.id + '"><span>' + esc(r.n) + '</span>' +
         (st ? '<span class="mono" title="DJ choisis">★' + st + '</span>' : '') + '</button><div class="fr-track">' + nowLine +
-        '<button type="button" class="fr-bar k-' + r.k + (onRoute(r.id) ? ' route' : '') + '" data-go="' + r.id + '" style="left:' + pct(r.s) + '%;width:' + (pct(r.e) - pct(r.s)) + '%" aria-label="' +
+        '<button type="button" class="fr-bar k-' + r.k + (onRoute(r.id) ? ' route' : '') + '" data-go="' + r.id + '" style="left:' + pct(r.s) + '%;width:' + (pct(r.e) - pct(r.s)) + '%;--i:' + i + '" aria-label="' +
         esc(r.n) + ' : ' + fmtH(r.s) + ' à ' + (r.k === 'tbc' ? 'fin à confirmer' : fmtH(r.e)) + '">' + lab + '</button></div></div>';
     }
     $('#frise-grid').innerHTML = html;
@@ -651,9 +652,11 @@
   }
   const nearBottom = () => { const el = $('#msgs'); return el.scrollHeight - el.scrollTop - el.clientHeight < 80; };
   function scrollMsgs(force) { const el = $('#msgs'); if (force) el.scrollTop = el.scrollHeight; }
+  let renderedMax = 0; // seuls les messages arrivés après le dernier affichage s'animent
   function renderMsgs() {
     let html = '', lastDay = '', lastFrom = null;
     for (const m of messages) {
+      const fresh = renderedMax > 0 && m.id > renderedMax;
       const d = dayKey(m.t);
       if (d !== lastDay) { html += '<li class="day">' + esc(dayLabel(m.t)) + '</li>'; lastDay = d; lastFrom = null; }
       const mine = m.from === me.id;
@@ -661,10 +664,11 @@
       const body = m.kind === 'rdv'
         ? '<p>Rendez-vous : ' + esc(m.text) + '<button class="btn" type="button" data-rdv="' + m.id + '">Voir sur la carte</button></p>'
         : '<p>' + esc(m.text) + '</p>';
-      html += '<li class="m' + (mine ? ' mine' : '') + (m.kind === 'rdv' ? ' rdv' : '') + '">' + who + body + '<time datetime="' + new Date(m.t).toISOString() + '">' + clock(m.t) + '</time></li>';
+      html += '<li class="m' + (mine ? ' mine' : '') + (m.kind === 'rdv' ? ' rdv' : '') + (fresh ? ' pop' : '') + '">' + who + body + '<time datetime="' + new Date(m.t).toISOString() + '">' + clock(m.t) + '</time></li>';
       lastFrom = m.from;
     }
     $('#msgs').innerHTML = html || '<li class="day">Aucun message. Lance la conversation.</li>';
+    if (messages.length) renderedMax = messages[messages.length - 1].id;
   }
   $('#msgs').addEventListener('click', e => {
     const b = e.target.closest('[data-rdv]'); if (!b) return;
@@ -694,7 +698,7 @@
 
   // ---------- Profil ----------
   function renderMeChip() {
-    $('#me-chip').innerHTML = '<span class="dot" style="--c:' + esc(me.color) + '">' + esc(initial(me.pseudo)) + '</span>' + esc(me.pseudo);
+    $('#me-chip').innerHTML = '<span class="dot" style="--c:' + esc(me.color) + '">' + esc(initial(me.pseudo)) + '</span><span class="nm">' + esc(me.pseudo) + '</span>';
   }
   $('#me-chip').addEventListener('click', () => {
     $('#me-name').textContent = me.pseudo;
