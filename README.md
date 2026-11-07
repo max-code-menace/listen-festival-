@@ -86,7 +86,9 @@ fly status
 - Le volume `listen_data` garde les messages et les membres entre deux démarrages.
 - Le code du groupe est un secret Fly : il n'est jamais dans le dépôt.
 
-Mettre à jour après un changement : `git pull` puis `fly deploy --ha=false`.
+Mettre à jour après un changement : un `git push` sur `main` suffit, GitHub redéploie tout seul (`.github/workflows/fly-deploy.yml`, avec la clé Fly dans le secret `FLY_API_TOKEN` du dépôt). À la main, depuis le PC : `git pull` puis `fly deploy --ha=false`.
+
+Le site en ligne : https://plan-listen.fly.dev (app `plan-listen`, région Paris).
 Voir les journaux : `fly logs`.
 
 Brancher un nom de domaine, plus tard :
