@@ -231,3 +231,30 @@ test('kilomètres marchés : gardés et visibles, valeurs absurdes ignorées', a
   assert.equal(feed.events[0].data.members.find(m => m.pseudo === 'Max').km, 2.35);
   feed.close(); await t.stop();
 });
+
+test('mode de secours : /api/sync renvoie membres, nouveaux messages et bruits récents', async () => {
+  const t = await start();
+  const a = await t.join('Max'), b = await t.join('Zoé');
+  assert.equal((await fetch(t.base + '/api/sync')).status, 401);
+  const m1 = (await t.call('POST', '/api/msg', { text: 'un' }, a.body.token)).body;
+  await t.call('POST', '/api/msg', { text: 'deux' }, a.body.token);
+  const sync = async (after, since, token) => (await fetch(`${t.base}/api/sync?after=${after}&since=${since}`, { headers: { Authorization: 'Bearer ' + token } })).json();
+  const s1 = await sync(0, 0, b.body.token);
+  assert.deepEqual(s1.messages.map(m => m.text), ['un', 'deux']);
+  assert.equal(s1.members.find(m => m.pseudo === 'Zoé').online, true, 'celui qui interroge compte comme en ligne');
+  assert.deepEqual((await sync(m1.id, 0, b.body.token)).messages.map(m => m.text), ['deux']);
+  await t.call('POST', '/api/boom', {}, a.body.token);
+  const s2 = await sync(0, s1.now, b.body.token);
+  assert.equal(s2.booms.length, 1); assert.equal(s2.booms[0].pseudo, 'Max');
+  assert.equal((await sync(0, s2.now + 1, b.body.token)).booms.length, 0);
+  await t.stop();
+});
+
+test('le flux en direct demande de ne pas être compressé ni retenu', async () => {
+  const t = await start();
+  const a = await t.join('Max');
+  const res = await new Promise(resolve => { const req = http.get(t.base + '/api/events?token=' + a.body.token, r => { resolve(r); req.destroy(); }); });
+  assert.match(res.headers['cache-control'], /no-transform/);
+  assert.equal(res.headers['x-accel-buffering'], 'no');
+  await t.stop();
+});

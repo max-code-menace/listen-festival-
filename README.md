@@ -26,7 +26,42 @@ Le site est pensé pour le téléphone d'abord (cibles tactiles de 44 px minimum
 npm test
 ```
 
-9 tests du serveur (code du groupe, groupe complet, messages en direct, positions privées, « J'y vais », sécurité des fichiers).
+19 tests du serveur (code du groupe, groupe complet, messages en direct, positions privées, « J'y vais », statut, bruit, pas, mode de secours, sécurité des fichiers).
+
+## Mettre en ligne sur un hébergement mutualisé (cPanel avec « Node.js »)
+
+Il faut que le panneau propose **« Setup Node.js App »** (« Configurer l'application Node.js »). Sans cette option, un hébergement mutualisé ne peut pas faire tourner le site (il ne sait lancer que du PHP) : il faut alors un VPS ou une autre plateforme.
+
+Non testé sur un vrai cPanel (je n'y ai pas accès) : le démarrage derrière Passenger est vérifié en simulation seulement.
+
+1. **Récupérer le code**, en SSH (le dépôt est public) :
+   ```bash
+   cd ~
+   git clone https://github.com/max-code-menace/listen-festival- listen-festival
+   mkdir -p ~/listen-data
+   ```
+   Sans `git` : téléchargez le ZIP depuis GitHub, envoyez-le par le Gestionnaire de fichiers et décompressez-le dans `~/listen-festival` (**pas** dans `public_html`).
+2. **cPanel → Setup Node.js App → Create Application** :
+   - Node.js version : la plus récente proposée (20 minimum)
+   - Application mode : `Production`
+   - Application root : `listen-festival`
+   - Application URL : votre domaine (ou un sous-domaine comme `listen.mondomaine.be`)
+   - Application startup file : **`start.js`** (pas `server.js`)
+   - Variables d'environnement :
+     | Nom | Valeur |
+     |---|---|
+     | `GROUP_CODE` | le code secret du groupe |
+     | `DATA_FILE` | `/home/VOTRE_UTILISATEUR/listen-data/db.json` |
+     | `TRUST_PROXY` | `1` |
+   Puis **Create** et **Restart**.
+3. **HTTPS** (obligatoire pour la position GPS) : cPanel → *SSL/TLS Status* → *Run AutoSSL* pour le domaine.
+4. **Vérifier** : `https://mondomaine.be/healthz` doit répondre `{"ok":true,…}`. Ouvrez ensuite le site : un point en haut indique l'état de la connexion.
+   - **« En direct »** : tout fonctionne en temps réel.
+   - **« Mode simple »** : l'hébergeur retient la connexion en direct, le site se met alors à jour toutes les 3 secondes (messages, positions et « bruit » marchent, avec un petit délai). C'est automatique.
+
+Mettre à jour : en SSH `cd ~/listen-festival && git pull`, puis **Restart** dans le panneau. Les messages sont gardés dans `~/listen-data/db.json`, hors du dossier du site, donc une mise à jour ne les efface pas.
+
+Si `/healthz` ne répond pas : regardez le journal d'erreurs de l'application (fichier `stderr.log` dans le dossier de l'application, ou le journal d'erreurs du panneau).
 
 ## Mettre en ligne sur Fly.io
 

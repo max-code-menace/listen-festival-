@@ -66,7 +66,9 @@ function createApp(opts = {}) {
 
   // ---------- Clients connectés (SSE) ----------
   const streams = new Map(); // memberId -> Set(res)
-  const online = id => (streams.get(id)?.size ?? 0) > 0;
+  const pollSeen = new Map(); // memberId -> dernière interrogation (mode de secours sans connexion en direct)
+  const recentBooms = [];     // les « bruits » des 30 dernières secondes, pour le mode de secours
+  const online = id => (streams.get(id)?.size ?? 0) > 0 || now() - (pollSeen.get(id) || 0) < 10e3;
   function view(m) {
     const status = m.status && now() - (m.statusAt || 0) < STATUS_TTL ? m.status : null;
     return { id: m.id, pseudo: m.pseudo, color: m.color, stars: m.stars || [], online: online(m.id), sharing: !!m.sharing && !!m.pos, pos: m.sharing ? m.pos : null, status, km: m.km || 0 };
@@ -155,19 +157,35 @@ function createApp(opts = {}) {
     if (!me) return fail(res, 401, 'Connexion expirée.');
 
     if (route === 'GET /api/events') {
-      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+      // no-transform + X-Accel-Buffering : demandent aux serveurs intermédiaires de ne ni compresser ni retenir le flux
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no', 'X-LiteSpeed-Buffer': 'no' });
       res.write('retry: 3000\n\n');
       if (!streams.has(me.id)) streams.set(me.id, new Set());
       streams.get(me.id).add(res);
       write(res, 'state', { me: me.id, members: Object.values(db.members).map(view), messages: db.messages.slice(-200), now: now() });
       announce(me);
-      const beat = setInterval(() => res.write(': ping\n\n'), 25e3);
+      const beat = setInterval(() => write(res, 'ping', { t: now() }), 25e3); // le site s'en sert pour détecter un flux bloqué
       req.on('close', () => {
         clearInterval(beat);
         streams.get(me.id)?.delete(res);
         if (!online(me.id)) { streams.delete(me.id); announce(me); }
       });
       return;
+    }
+
+    // Mode de secours : si l'hébergeur retient la connexion en direct, le site interroge toutes les 3 s
+    if (route === 'GET /api/sync') {
+      if (limited('sync:' + me.id, 60, 60e3)) return fail(res, 429, 'Trop de demandes.');
+      const after = Number(url.searchParams.get('after')) || 0, since = Number(url.searchParams.get('since')) || 0;
+      const wasOnline = online(me.id);
+      pollSeen.set(me.id, now());
+      if (!wasOnline) announce(me);
+      return json(res, 200, {
+        now: now(), me: me.id,
+        members: Object.values(db.members).map(view),
+        messages: db.messages.filter(m => m.id > after).slice(-200),
+        booms: recentBooms.filter(b => b.t > since),
+      });
     }
 
     if (route === 'POST /api/pos') {
@@ -217,7 +235,10 @@ function createApp(opts = {}) {
     if (route === 'POST /api/boom') {
       // Pas gardé en mémoire : c'est un éclair vu en direct par tout le groupe
       if (limited('boom:' + me.id, 1, 4000)) return fail(res, 429, 'Doucement, laisse le bruit retomber.');
-      broadcast('boom', { from: me.id, pseudo: me.pseudo, color: me.color, t: now() });
+      const boom = { from: me.id, pseudo: me.pseudo, color: me.color, t: now() };
+      recentBooms.push(boom);
+      while (recentBooms.length && now() - recentBooms[0].t > 30e3) recentBooms.shift();
+      broadcast('boom', boom);
       return json(res, 200, { ok: true });
     }
 
@@ -270,10 +291,11 @@ function createApp(opts = {}) {
   return { server, flush };
 }
 
-module.exports = { createApp, COLORS, STATUSES };
-
-if (require.main === module) {
-  const production = process.env.NODE_ENV === 'production';
+// Démarre le site. `node server.js` suffit chez soi ; un hébergeur « Node.js » (Passenger) charge start.js,
+// qui appelle cette fonction : dans ce cas le port est choisi par Passenger (listen('passenger')).
+function main() {
+  const passenger = typeof PhusionPassenger !== 'undefined'; // eslint-disable-line no-undef
+  const production = process.env.NODE_ENV === 'production' || passenger;
   if (!process.env.GROUP_CODE && production) {
     console.error('GROUP_CODE est obligatoire en production (le code que vous donnez à vos potes).');
     process.exit(1);
@@ -281,9 +303,16 @@ if (require.main === module) {
   if (!process.env.GROUP_CODE) process.env.GROUP_CODE = 'listen';
   const { server, flush } = createApp();
   const port = Number(process.env.PORT) || 3000;
-  server.listen(port, process.env.HOST || '0.0.0.0', () => {
-    console.log(`Plan Listen sur http://localhost:${port}`);
-    console.log(`Code du groupe : ${process.env.GROUP_CODE}${process.env.GROUP_CODE === 'listen' ? '  (valeur de test : changez-la avec GROUP_CODE)' : ''}`);
-  });
+  const ready = () => {
+    console.log(passenger ? 'Plan Listen démarré (Passenger).' : `Plan Listen sur http://localhost:${port}`);
+    console.log(`Code du groupe : ${process.env.GROUP_CODE === 'listen' ? 'listen  (valeur de test : changez-la avec GROUP_CODE)' : '(défini)'}`);
+  };
+  if (passenger) server.listen('passenger', ready);
+  else server.listen(port, process.env.HOST || '0.0.0.0', ready);
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { flush(); process.exit(0); });
+  return server;
 }
+
+module.exports = { createApp, COLORS, STATUSES, main };
+
+if (require.main === module) main();

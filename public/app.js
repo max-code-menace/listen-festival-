@@ -121,13 +121,54 @@
   // ---------- Temps réel (SSE) ----------
   function setConn(s) {
     const el = $('#conn'); el.className = 'status ' + s;
-    $('#conn-txt').textContent = s === 'on' ? 'En direct' : 'Reconnexion…';
+    $('#conn-txt').textContent = s === 'on' ? 'En direct' : s === 'poll' ? 'Mode simple' : 'Reconnexion…';
   }
   function closeStream() { if (es) { es.close(); es = null; } }
+
+  // Mode de secours : si l'hébergeur retient la connexion en direct, on interroge le serveur toutes les 3 s
+  let polling = false, pollTimer = null, lastSync = 0, lastEventAt = 0, stateTimer = null;
+  function stopPolling() { polling = false; clearInterval(pollTimer); pollTimer = null; lastSync = 0; }
+  function startPolling() {
+    if (polling || !me) return;
+    closeStream(); clearTimeout(stateTimer);
+    polling = true; setConn('poll'); poll();
+    pollTimer = setInterval(poll, 3000);
+  }
+  async function poll() {
+    try {
+      const after = messages.length ? messages[messages.length - 1].id : 0;
+      const r = await fetch('/api/sync?after=' + after + '&since=' + lastSync, { headers: { Authorization: 'Bearer ' + me.token } });
+      if (r.status === 401) return logout('Ta connexion a expiré. Entre à nouveau dans le groupe.');
+      if (!r.ok) throw new Error('sync ' + r.status);
+      const d = await r.json(), first = lastSync === 0, old = members;
+      skew = d.now - Date.now(); lastSync = d.now;
+      members = new Map(d.members.map(m => [m.id, m]));
+      setConn('poll');
+      if (first) {
+        messages = d.messages; adoptServerStars();
+        unread = tab === 'chat' ? 0 : messages.filter(m => m.id > seen && m.from !== me.id).length;
+        renderAll(); if (tab === 'chat') markRead();
+        return;
+      }
+      const starsChanged = old.size !== members.size || [...members.values()].some(m => { const p = old.get(m.id); return !p || JSON.stringify(p.stars) !== JSON.stringify(m.stars); });
+      renderPotes(); syncFriendMarkers(); renderMeChip(); refreshRouteSelects();
+      if (starsChanged) { renderVenue(); renderLineup(); renderFrise(); }
+      for (const m of d.messages) addMsg(m);
+      for (const b of d.booms) onBoom(b);
+    } catch (e) { setConn('wait'); }
+  }
+  // Un flux « en direct » qui ne dit plus rien (retenu par un intermédiaire) est relancé
+  setInterval(() => { if (me && es && lastEventAt && Date.now() - lastEventAt > 75000) connect(); }, 20000);
+
   function connect() {
-    closeStream(); setConn('wait');
+    closeStream(); stopPolling(); setConn('wait');
     es = new EventSource('/api/events?token=' + encodeURIComponent(me.token));
+    let gotState = false, failures = 0;
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(() => { if (!gotState) startPolling(); }, 7000); // pas de réponse en 7 s : mode de secours
+    ['state', 'member', 'gone', 'msg', 'boom', 'ping'].forEach(n => es.addEventListener(n, () => { lastEventAt = Date.now(); }));
     es.addEventListener('state', ev => {
+      gotState = true; clearTimeout(stateTimer);
       const d = JSON.parse(ev.data);
       skew = d.now - Date.now();
       members = new Map(d.members.map(m => [m.id, m]));
@@ -152,6 +193,7 @@
     es.addEventListener('boom', ev => onBoom(JSON.parse(ev.data)));
     es.onerror = () => {
       setConn('wait');
+      if (++failures >= 3 && !gotState) return startPolling();
       if (es && es.readyState === EventSource.CLOSED) {
         // Le serveur a refusé : session expirée ? api() nous déconnecte si c'est le cas, sinon on reconnecte.
         setTimeout(() => { if (me) api('/api/stars', { stars: [...myStars] }).then(connect).catch(() => {}); }, 2500);

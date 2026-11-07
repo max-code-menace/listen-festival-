@@ -107,6 +107,7 @@ select option, select optgroup { background: #1a1030; color: var(--fg); }
 .status i { width: 9px; height: 9px; border-radius: 50%; background: var(--skip); }
 .status.on i { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
 .status.wait i { background: var(--accent); animation: blink 1s infinite; }
+.status.poll i { background: var(--pink); box-shadow: 0 0 10px var(--pink); }
 #conn-txt { display: none; }
 .count { display: grid; gap: 1px; padding: 6px 12px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line); text-align: right; animation: float 4s ease-in-out infinite alternate; }
 .count b { font-family: var(--f-display); font-size: 1.05rem; line-height: 1; }
