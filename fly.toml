@@ -1,34 +1,38 @@
-# Plan Listen sur Fly.io. Une seule machine : les messages en direct et le fichier de données
-# vivent dans ce processus, deux machines se contrediraient.
-app = "listen-festival"
-primary_region = "cdg"   # Paris
+# fly.toml app configuration file generated for plan-listen on 2026-11-07T20:11:47+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+# Plan Listen sur Fly.io. Une seule machine (fly deploy --ha=false) : les messages en direct et
+# le fichier de données vivent dans ce processus, deux machines se contrediraient.
+
+app = 'plan-listen'
+primary_region = 'cdg'
 
 [build]
-
 [env]
-  NODE_ENV = "production"
-  PORT = "8080"
-  DATA_FILE = "/data/db.json"
-  TRUST_PROXY = "1"
+  DATA_FILE = '/data/db.json'
+  NODE_ENV = 'production'
+  PORT = '8080'
+  TRUST_PROXY = '1'
 
 [[mounts]]
-  source = "listen_data"
-  destination = "/data"
+  source = 'listen_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  auto_stop_machines = 'off'
   auto_start_machines = false
   min_machines_running = 1
 
   [[http_service.checks]]
-    grace_period = "10s"
-    interval = "30s"
-    method = "GET"
-    path = "/healthz"
-    timeout = "5s"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/healthz'
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
