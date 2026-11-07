@@ -41,8 +41,8 @@ Non testé sur un vrai cPanel (je n'y ai pas accès) : le démarrage derrière P
    mkdir -p ~/listen-data
    ```
    Sans `git` : téléchargez le ZIP depuis GitHub, envoyez-le par le Gestionnaire de fichiers et décompressez-le dans `~/listen-festival` (**pas** dans `public_html`).
-2. **cPanel → Setup Node.js App → Create Application** :
-   - Node.js version : la plus récente proposée (20 minimum)
+2. **cPanel → Setup Node.js App → Create Application** (en français, section LOGICIEL : « Configurer une application Node.js », puis « Créer une application ») :
+   - Node.js version : 20 minimum, de préférence la version LTS la plus récente. Si elle n'est pas dans la liste, demandez-la au support : chez EasyHoster c'est gratuit et traité sous 24 h.
    - Application mode : `Production`
    - Application root : `listen-festival`
    - Application URL : votre domaine (ou un sous-domaine comme `listen.mondomaine.be`)
