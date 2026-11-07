@@ -58,7 +58,7 @@
   let myStars = new Set(store.get('l26.stars', []));
   let sel = 'hexagon', filter = 'all', tab = 'carte';
   let myPos = null, sharing = false, watchId = null, lastSent = null, wake = null;
-  let es = null, skew = 0, unread = 0, seen = store.get('l26.seen', 0);
+  let es = null, skew = 0, unread = 0, seen = store.get('l26.seen', 0), walked = store.get('l26.km', 0);
 
   // ---------- Réseau ----------
   async function api(path, body) {
@@ -149,6 +149,7 @@
       renderPotes(); syncFriendMarkers(); renderVenue(); renderLineup(); refreshRouteSelects();
     });
     es.addEventListener('msg', ev => addMsg(JSON.parse(ev.data)));
+    es.addEventListener('boom', ev => onBoom(JSON.parse(ev.data)));
     es.onerror = () => {
       setConn('wait');
       if (es && es.readyState === EventSource.CLOSED) {
@@ -239,7 +240,7 @@
       live.add(m.id);
       const old = ageSec(m.pos.t) > 180;
       const icon = L.divIcon({ className: '', html: '<div class="pin-hit"><div class="friend' + (old ? ' old' : '') + '" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</div></div>', iconSize: [44, 44], iconAnchor: [22, 22] });
-      const tip = '<span class="fl" style="background:' + esc(m.color) + '">' + esc(m.pseudo) + '</span>';
+      const tip = '<span class="fl" style="background:' + esc(m.color) + '">' + esc(m.pseudo) + (m.status ? ' · ' + esc(m.status) : '') + '</span>';
       let mk = friendMarkers[m.id];
       if (!mk) {
         mk = L.marker([m.pos.lat, m.pos.lng], { icon, zIndexOffset: 800, title: m.pseudo, alt: m.pseudo }).addTo(map);
@@ -309,12 +310,18 @@
     if (notify && me) api('/api/pos', { sharing: false }).catch(() => {});
   }
   function onGeo(p) {
+    const prev = myPos;
     setMyPos(p);
     if (!sharing) return;
+    // Les pas : on additionne les petits déplacements fiables (ni immobile, ni saut de GPS)
+    if (prev && p.coords.accuracy < 50) {
+      const d = km(prev, myPos) * 1000;
+      if (d > 4 && d < 150) { walked += d / 1000; store.set('l26.km', walked); }
+    }
     const t = Date.now(), moved = lastSent ? km(lastSent, myPos) * 1000 : Infinity, dt = lastSent ? t - lastSent.t : Infinity;
     if (!lastSent || moved > 25 || (dt > 12000 && moved > 5) || dt > 45000) {
       lastSent = { lat: myPos.lat, lng: myPos.lng, t };
-      api('/api/pos', { lat: myPos.lat, lng: myPos.lng, acc: myPos.acc }).catch(() => {});
+      api('/api/pos', { lat: myPos.lat, lng: myPos.lng, acc: myPos.acc, km: Math.round(walked * 100) / 100 }).catch(() => {});
     }
   }
   $('#btn-share').addEventListener('click', () => (sharing ? stopShare(true) : startShare()));
@@ -376,6 +383,7 @@
     const others = [...members.values()].filter(m => m.id !== me.id)
       .sort((a, b) => (b.sharing - a.sharing) || (b.online - a.online) || a.pseudo.localeCompare(b.pseudo));
     $('#potes-n').textContent = members.size + (members.size > 1 ? ' dans le groupe' : ' dans le groupe');
+    renderWalker(); renderStatus();
     if (!others.length) {
       $('#potes').innerHTML = '<li class="empty">Personne d’autre pour l’instant. Envoie le lien d’invitation depuis ton profil (en haut à droite).</li>';
       return;
@@ -386,10 +394,12 @@
         const near = nearestPlace(m.pos), dist = myPos ? ' · à ' + fmtDist(km(myPos, m.pos) * 1000) + ' de toi' : '';
         sub = '<span class="live' + (ageSec(m.pos.t) > 180 ? ' off' : '') + '"></span>' + ageText(m.pos.t) + (near ? ' · près de ' + esc(near) : '') + dist;
       } else sub = '<span class="live off"></span>' + (m.online ? 'en ligne, position non partagée' : 'hors ligne');
+      const statTag = m.status ? '<span class="stat' + (m.status === 'Je suis perdu' ? ' lost' : '') + '">' + esc(m.status) + '</span>' : '';
+      const walkTxt = (m.km || 0) >= 0.1 ? ' · ' + fmtDist(m.km * 1000) + ' marchés' : '';
       const n = (m.stars || []).length;
       const planBtn = n ? '<br><button class="link" type="button" data-act="plan" data-id="' + m.id + '">Son planning · ' + n + ' DJ</button>' : '';
       const acts = m.sharing && m.pos ? '<button class="btn" type="button" data-act="see" data-id="' + m.id + '">Voir</button><button class="btn" type="button" data-act="go" data-id="' + m.id + '">Y aller</button>' : '';
-      return '<li class="pote"><span class="dot" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</span><div><b>' + esc(m.pseudo) + '</b><div class="sub">' + sub + planBtn + '</div></div><div class="acts">' + acts + '</div></li>';
+      return '<li class="pote"><span class="dot" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</span><div><b>' + esc(m.pseudo) + '</b>' + statTag + '<div class="sub">' + sub + walkTxt + planBtn + '</div></div><div class="acts">' + acts + '</div></li>';
     }).join('');
   }
   $('#potes').addEventListener('click', e => {
@@ -725,8 +735,10 @@
       const who = !mine && lastFrom !== m.from ? '<span class="who" style="color:' + esc(m.color) + '">' + esc(m.pseudo) + '</span>' : '';
       const body = m.kind === 'rdv'
         ? '<p>Rendez-vous : ' + esc(m.text) + '<button class="btn" type="button" data-rdv="' + m.id + '">Voir sur la carte</button></p>'
-        : '<p>' + esc(m.text) + '</p>';
-      html += '<li class="m' + (mine ? ' mine' : '') + (m.kind === 'rdv' ? ' rdv' : '') + (fresh ? ' pop' : '') + '">' + who + body + '<time datetime="' + new Date(m.t).toISOString() + '">' + clock(m.t) + '</time></li>';
+        : m.kind === 'here'
+          ? '<p>' + esc(m.text) + '<button class="btn" type="button" data-rdv="' + m.id + '">Voir sur la carte</button></p>'
+          : '<p>' + esc(m.text) + '</p>';
+      html += '<li class="m' + (mine ? ' mine' : '') + (m.kind === 'rdv' ? ' rdv' : m.kind === 'here' ? ' here' : '') + (fresh ? ' pop' : '') + '">' + who + body + '<time datetime="' + new Date(m.t).toISOString() + '">' + clock(m.t) + '</time></li>';
       lastFrom = m.from;
     }
     $('#msgs').innerHTML = html || '<li class="day">Aucun message. Lance la conversation.</li>';
@@ -736,6 +748,7 @@
     const b = e.target.closest('[data-rdv]'); if (!b) return;
     const m = messages.find(x => x.id === +b.dataset.rdv); if (!m) return;
     showTab('carte'); map.flyTo([m.lat, m.lng], Math.max(map.getZoom(), 17), { duration: reduced() ? 0 : .6 });
+    if (m.kind === 'here') showHere(m);
   });
   async function send(text) {
     text = text.trim(); if (!text) return;
@@ -749,8 +762,81 @@
     if (!(await send(v))) inp.value = v;
     inp.focus();
   });
-  $('#quick').innerHTML = QUICK.map(q => '<button type="button">' + esc(q) + '</button>').join('');
-  $('#quick').addEventListener('click', e => { const b = e.target.closest('button'); if (b) send(b.textContent); });
+  $('#quick').innerHTML = '<button type="button" class="hot" data-do="boom">Faire du bruit</button><button type="button" class="hot" data-do="here">Ma position</button>' +
+    QUICK.map(q => '<button type="button">' + esc(q) + '</button>').join('');
+  $('#quick').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.do === 'boom') return sendBoom();
+    if (b.dataset.do === 'here') return sendHere();
+    send(b.textContent);
+  });
+
+  // ---------- Statut rapide ----------
+  let myStatus = null, statusHtml = '';
+  function renderStatus() {
+    const mine = members.get(me.id);
+    if (mine) myStatus = mine.status || null;
+    const html = STATUS.map(s => '<button type="button" class="chip' + (s === 'Je suis perdu' ? ' lost' : '') + '" aria-pressed="' + (s === myStatus) + '" data-s="' + esc(s) + '">' + esc(s) + '</button>').join('');
+    if (html !== statusHtml) { statusHtml = html; $('#status-chips').innerHTML = html; } // ne touche pas au DOM si rien ne change
+  }
+  $('#status-chips').addEventListener('click', async e => {
+    const b = e.target.closest('[data-s]'); if (!b) return;
+    const next = b.dataset.s === myStatus ? null : b.dataset.s;
+    myStatus = next; renderStatus();
+    try { await api('/api/status', { status: next }); } catch (err) { if (err.message !== '401') toast(err.message); return; }
+    if (next === 'Je suis perdu') sendHere('Je suis perdu, voici ma position');
+  });
+
+  // Le plus gros marcheur
+  function renderWalker() {
+    const arr = [...members.values()].map(m => ({ n: m.id === me.id ? 'toi' : m.pseudo, km: m.id === me.id ? Math.max(walked, m.km || 0) : (m.km || 0) }))
+      .filter(x => x.km > 0).sort((a, b) => b.km - a.km);
+    const el = $('#walker');
+    if (arr.length < 2 || arr[0].km < 0.3) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = arr[0].n === 'toi' ? 'Tu es le plus gros marcheur : ' + fmtDist(arr[0].km * 1000) + '.' : 'Le plus gros marcheur : ' + arr[0].n + ' (' + fmtDist(arr[0].km * 1000) + ').';
+  }
+
+  // ---------- Ma position dans le chat ----------
+  let hereMarker = null, hereTimer;
+  function showHere(m) {
+    if (hereMarker) map.removeLayer(hereMarker);
+    clearTimeout(hereTimer);
+    hereMarker = L.marker([m.lat, m.lng], { zIndexOffset: 850, title: m.pseudo + ' est ici', alt: m.pseudo + ' est ici',
+      icon: L.divIcon({ className: '', html: '<div class="pin-hit"><div class="friend" style="--c:' + esc(m.color) + '">' + esc(initial(m.pseudo)) + '</div></div>', iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
+    hereTimer = setTimeout(() => { if (hereMarker) { map.removeLayer(hereMarker); hereMarker = null; } }, 120000);
+  }
+  function sendHere(text) {
+    if (!navigator.geolocation) return toast('Ce navigateur ne donne pas la position.');
+    toast('Recherche de ta position…');
+    navigator.geolocation.getCurrentPosition(async p => {
+      setMyPos(p);
+      try {
+        addMsg(await api('/api/msg', { text: text || 'Position de ' + me.pseudo, kind: 'here', lat: myPos.lat, lng: myPos.lng }));
+        toast('Position envoyée au groupe.');
+      } catch (err) { if (err.message !== '401') toast(err.message); }
+    }, err => toast(geoMessage(err)), { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+  }
+
+  // ---------- Faire du bruit ----------
+  async function sendBoom() {
+    try { await api('/api/boom'); } catch (err) { if (err.message !== '401') toast(err.message); }
+  }
+  $('#btn-boom').addEventListener('click', sendBoom);
+  function onBoom(d) {
+    try { if (navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch (e) { /* pas de vibreur */ }
+    const box = $('#burst'), c = COLORS.includes(d.color) ? d.color : '#ffc83d';
+    const add = (cls, html, style, life) => { const el = document.createElement('div'); el.className = cls; el.style.cssText = style; if (html) el.textContent = html; box.appendChild(el); setTimeout(() => el.remove(), life); };
+    add('btag', d.pseudo + (d.from === me.id ? ' : tu fais du bruit' : ' fait du bruit'), '--c:' + c, 1700);
+    if (reduced()) return;
+    add('bflash', '', '--c:' + c, 1000);
+    add('bring', '', '--c:' + c, 1100);
+    const mix = [c, '#ffc83d', '#ff9ccb', '#3ee6d8', '#ffffff'];
+    for (let i = 0; i < 34; i++) {
+      const a = Math.random() * Math.PI * 2, r = 90 + Math.random() * 190;
+      add('bp', '', '--c:' + mix[i % mix.length] + ';--dx:' + (Math.cos(a) * r).toFixed(0) + 'px;--dy:' + (Math.sin(a) * r).toFixed(0) + 'px;--s:' + (6 + Math.random() * 12).toFixed(0) + 'px', 1300);
+    }
+  }
 
   // Clavier ouvert sur téléphone : les onglets laissent la place à la zone de saisie
   $('#msg-in').addEventListener('focus', () => { document.body.classList.add('kb'); scrollMsgs(true); });
@@ -764,6 +850,7 @@
   }
   $('#me-chip').addEventListener('click', () => {
     $('#me-name').textContent = me.pseudo;
+    $('#me-km').textContent = walked >= 0.05 ? 'Tes pas : ' + fmtDist(walked * 1000) + ' (comptés tant que tu partages ta position).' : '';
     $('#me-info').textContent = members.size + ' dans le groupe. Pour te reconnecter sur un autre téléphone, entre le même pseudo avec le code du groupe.';
     const d = $('#me-dialog'); if (d.showModal) d.showModal();
   });

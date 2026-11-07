@@ -89,4 +89,7 @@ const ROUTE = [
 // Couleurs proposées aux potes (le serveur accepte exactement cette liste)
 const COLORS = ['#f5b800', '#57c4d1', '#ff6b6b', '#7bd36b', '#c08bff', '#ff9f4a', '#4f8dff', '#ff7ac6', '#b8c23a', '#e8e8e8'];
 
-const QUICK = ['Je suis arrivé', 'Vous êtes où ?', 'On bouge ?', "J'ai soif", 'Venez, c’est dingue ici', 'Je rentre'];
+// Statuts rapides (identiques à ceux du serveur, un test le vérifie)
+const STATUS = ['Au bar', 'Dans la file', 'Je danse', 'Je mange', 'Je vous cherche', 'Je rentre', 'Je suis perdu'];
+
+const QUICK =['Je suis arrivé', 'Vous êtes où ?', 'On bouge ?', "J'ai soif", 'Venez, c’est dingue ici', 'Je rentre'];

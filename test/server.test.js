@@ -176,3 +176,58 @@ test('sans proxy de confiance, un en-tête X-Forwarded-For ne contourne pas la l
   assert.equal(await essai('8.8.8.8'), 429);
   await t.stop();
 });
+
+test('statut rapide : accepté, visible par les autres, effaçable, inconnu refusé', async () => {
+  const t = await start();
+  const a = await t.join('Max'), b = await t.join('Zoé');
+  const feed = await t.listen(b.body.token);
+  await t.wait(50);
+  assert.equal((await t.call('POST', '/api/status', { status: 'Au bar' }, a.body.token)).status, 200);
+  await t.wait(80);
+  assert.equal(feed.events.filter(e => e.event === 'member' && e.data.pseudo === 'Max').pop().data.status, 'Au bar');
+  assert.equal((await t.call('POST', '/api/status', { status: 'Je vole' }, a.body.token)).status, 400);
+  await t.call('POST', '/api/status', { status: null }, a.body.token);
+  await t.wait(80);
+  assert.equal(feed.events.filter(e => e.event === 'member' && e.data.pseudo === 'Max').pop().data.status, null);
+  feed.close(); await t.stop();
+});
+
+test('les statuts du site et du serveur sont identiques', () => {
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  const site = vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'data.js'), 'utf8') + '\nSTATUS');
+  assert.deepEqual([...site], [...require('../server.js').STATUSES]);
+});
+
+test('« je suis ici » : message avec position accepté, sans position refusé', async () => {
+  const t = await start();
+  const a = await t.join('Max');
+  const ok = await t.call('POST', '/api/msg', { text: 'Je suis perdu', kind: 'here', lat: 50.84, lng: 4.35 }, a.body.token);
+  assert.equal(ok.status, 200); assert.equal(ok.body.kind, 'here'); assert.equal(ok.body.lat, 50.84);
+  assert.equal((await t.call('POST', '/api/msg', { text: 'Ici', kind: 'here' }, a.body.token)).status, 400);
+  await t.stop();
+});
+
+test('« faire du bruit » arrive en direct chez tout le groupe, et le spam est freiné', async () => {
+  const t = await start();
+  const a = await t.join('Max'), b = await t.join('Zoé');
+  const feed = await t.listen(b.body.token);
+  await t.wait(50);
+  assert.equal((await t.call('POST', '/api/boom', {}, a.body.token)).status, 200);
+  await t.wait(80);
+  const boom = feed.events.find(e => e.event === 'boom');
+  assert.equal(boom.data.pseudo, 'Max'); assert.ok(boom.data.color);
+  assert.equal((await t.call('POST', '/api/boom', {}, a.body.token)).status, 429);
+  assert.equal(feed.events.filter(e => e.event === 'boom').length, 1);
+  feed.close(); await t.stop();
+});
+
+test('kilomètres marchés : gardés et visibles, valeurs absurdes ignorées', async () => {
+  const t = await start();
+  const a = await t.join('Max'), b = await t.join('Zoé');
+  await t.call('POST', '/api/pos', { lat: 50.84, lng: 4.35, km: 2.3456 }, a.body.token);
+  await t.call('POST', '/api/pos', { lat: 50.84, lng: 4.35, km: 9999 }, a.body.token);   // ignoré, garde 2,35
+  const feed = await t.listen(b.body.token);
+  await t.wait(80);
+  assert.equal(feed.events[0].data.members.find(m => m.pseudo === 'Max').km, 2.35);
+  feed.close(); await t.stop();
+});

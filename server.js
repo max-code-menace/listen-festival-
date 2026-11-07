@@ -9,6 +9,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const COLORS = ['#f5b800', '#57c4d1', '#ff6b6b', '#7bd36b', '#c08bff', '#ff9f4a', '#4f8dff', '#ff7ac6', '#b8c23a', '#e8e8e8'];
+// Statuts rapides : doit rester identique à STATUS dans public/data.js (un test le vérifie)
+const STATUSES = ['Au bar', 'Dans la file', 'Je danse', 'Je mange', 'Je vous cherche', 'Je rentre', 'Je suis perdu'];
+const STATUS_TTL = 90 * 60e3; // un statut s'efface seul au bout d'1 h 30
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
@@ -65,7 +68,8 @@ function createApp(opts = {}) {
   const streams = new Map(); // memberId -> Set(res)
   const online = id => (streams.get(id)?.size ?? 0) > 0;
   function view(m) {
-    return { id: m.id, pseudo: m.pseudo, color: m.color, stars: m.stars || [], online: online(m.id), sharing: !!m.sharing && !!m.pos, pos: m.sharing ? m.pos : null };
+    const status = m.status && now() - (m.statusAt || 0) < STATUS_TTL ? m.status : null;
+    return { id: m.id, pseudo: m.pseudo, color: m.color, stars: m.stars || [], online: online(m.id), sharing: !!m.sharing && !!m.pos, pos: m.sharing ? m.pos : null, status, km: m.km || 0 };
   }
   function write(res, event, data) { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
   function broadcast(event, data) {
@@ -173,6 +177,7 @@ function createApp(opts = {}) {
       if (!num(b.lat, -90, 90) || !num(b.lng, -180, 180)) return fail(res, 400, 'Position invalide.');
       me.pos = { lat: b.lat, lng: b.lng, acc: num(b.acc, 0, 100000) ? Math.round(b.acc) : null, t: now() };
       me.sharing = true;
+      if (num(b.km, 0, 300)) me.km = Math.round(b.km * 100) / 100; // kilomètres marchés (compteur du téléphone)
       save(); announce(me);
       return json(res, 200, { ok: true });
     }
@@ -181,10 +186,10 @@ function createApp(opts = {}) {
       if (limited('msg:' + me.id, 25, 60e3)) return fail(res, 429, 'Doucement, trop de messages.');
       const b = await body(req);
       const text = clean(b.text, 400);
-      const kind = ['text', 'rdv'].includes(b.kind) ? b.kind : 'text';
+      const kind = ['text', 'rdv', 'here'].includes(b.kind) ? b.kind : 'text';
       if (!text) return fail(res, 400, 'Message vide.');
       const extra = {};
-      if (kind === 'rdv') {
+      if (kind === 'rdv' || kind === 'here') {
         if (!num(b.lat, -90, 90) || !num(b.lng, -180, 180)) return fail(res, 400, 'Point de rendez-vous invalide.');
         extra.lat = b.lat; extra.lng = b.lng;
       }
@@ -196,6 +201,23 @@ function createApp(opts = {}) {
       if (!Array.isArray(b.stars) || b.stars.length > 300) return fail(res, 400, 'Liste invalide.');
       me.stars = [...new Set(b.stars.filter(s => typeof s === 'string' && s.length <= 120))];
       save(); announce(me);
+      return json(res, 200, { ok: true });
+    }
+
+    if (route === 'POST /api/status') {
+      if (limited('status:' + me.id, 30, 60e3)) return fail(res, 429, 'Trop de changements de statut.');
+      const b = await body(req);
+      if (b.status === null || b.status === '') me.status = null;
+      else if (STATUSES.includes(b.status)) { me.status = b.status; me.statusAt = now(); }
+      else return fail(res, 400, 'Statut inconnu.');
+      save(); announce(me);
+      return json(res, 200, { ok: true });
+    }
+
+    if (route === 'POST /api/boom') {
+      // Pas gardé en mémoire : c'est un éclair vu en direct par tout le groupe
+      if (limited('boom:' + me.id, 1, 4000)) return fail(res, 429, 'Doucement, laisse le bruit retomber.');
+      broadcast('boom', { from: me.id, pseudo: me.pseudo, color: me.color, t: now() });
       return json(res, 200, { ok: true });
     }
 
@@ -248,7 +270,7 @@ function createApp(opts = {}) {
   return { server, flush };
 }
 
-module.exports = { createApp, COLORS };
+module.exports = { createApp, COLORS, STATUSES };
 
 if (require.main === module) {
   const production = process.env.NODE_ENV === 'production';

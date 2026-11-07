@@ -66,6 +66,12 @@
           <section class="card" aria-labelledby="potes-t">
             <div class="card-head"><h3 id="potes-t">Les potes</h3><span class="mute small" id="potes-n"></span></div>
             <ul class="potes" id="potes"></ul>
+            <p class="walker small" id="walker" hidden></p>
+            <div class="status-row">
+              <span class="label" id="st-l">Mon statut</span>
+              <div class="chips" id="status-chips" role="group" aria-labelledby="st-l"></div>
+            </div>
+            <button class="btn main boom" id="btn-boom" type="button">Faire du bruit</button>
           </section>
           <form class="card rdv-form" id="rdv-form" hidden>
             <h3>Point de rendez-vous</h3>
@@ -174,6 +180,7 @@
     <form method="dialog" class="dlg-body">
       <h3 id="me-name"></h3>
       <p class="mute small" id="me-info"></p>
+      <p class="small" id="me-km"></p>
       <div class="links">
         <button class="btn main" id="me-invite" type="button">Copier le lien d'invitation</button>
         <button class="btn" id="me-leave" type="button">Quitter le groupe</button>
@@ -182,6 +189,8 @@
     </form>
   </dialog>
 </div>
+
+<div id="burst" aria-hidden="true"></div>
 
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/data.js"></script>
