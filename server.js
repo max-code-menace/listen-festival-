@@ -35,6 +35,9 @@ function createApp(opts = {}) {
   if (!code) throw new Error('GROUP_CODE manquant');
   const dataFile = 'dataFile' in opts ? opts.dataFile : (process.env.DATA_FILE || path.join(__dirname, 'data', 'db.json')); // null = pas de fichier (tests)
   const maxMembers = opts.maxMembers ?? (Number(process.env.MAX_MEMBERS) || 10);
+  // Derrière le proxy d'un hébergeur, l'adresse du visiteur est dans un en-tête (sinon tout le monde aurait la même)
+  const trustProxy = opts.trustProxy ?? process.env.TRUST_PROXY === '1';
+  const secure = opts.secure ?? process.env.NODE_ENV === 'production';
   const publicDir = path.join(__dirname, 'public');
   const codeHash = sha(code.toLowerCase());
 
@@ -102,7 +105,13 @@ function createApp(opts = {}) {
     for (const m of Object.values(db.members)) if (m.tokenHash && crypto.timingSafeEqual(Buffer.from(m.tokenHash, 'hex'), th)) return m;
     return null;
   }
-  const ip = req => req.socket.remoteAddress || '?';
+  const ip = req => {
+    if (trustProxy) {
+      const h = req.headers['fly-client-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+      if (h) return h;
+    }
+    return req.socket.remoteAddress || '?';
+  };
 
   function addMessage(m, msg) {
     const out = { id: ++db.seq, t: now(), from: m.id, pseudo: m.pseudo, color: m.color, kind: 'text', text: '', ...msg };
@@ -224,8 +233,10 @@ function createApp(opts = {}) {
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
     res.setHeader('Content-Security-Policy', CSP);
+    if (secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     try {
       const url = new URL(req.url, 'http://x');
+      if (url.pathname === '/healthz') return json(res, 200, { ok: true, membres: Object.keys(db.members).length });
       if (url.pathname.startsWith('/api/')) await api(req, res, url);
       else serve(req, res, url);
     } catch (e) {
@@ -248,7 +259,7 @@ if (require.main === module) {
   if (!process.env.GROUP_CODE) process.env.GROUP_CODE = 'listen';
   const { server, flush } = createApp();
   const port = Number(process.env.PORT) || 3000;
-  server.listen(port, () => {
+  server.listen(port, process.env.HOST || '0.0.0.0', () => {
     console.log(`Plan Listen sur http://localhost:${port}`);
     console.log(`Code du groupe : ${process.env.GROUP_CODE}${process.env.GROUP_CODE === 'listen' ? '  (valeur de test : changez-la avec GROUP_CODE)' : ''}`);
   });

@@ -144,3 +144,35 @@ test('sert le site et refuse de sortir du dossier public', async () => {
   assert.ok([403, 404].includes(raw));
   await t.stop();
 });
+
+test('/healthz répond pour l’hébergeur', async () => {
+  const t = await start();
+  const r = await fetch(t.base + '/healthz');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).ok, true);
+  await t.stop();
+});
+
+test('en production : HTTPS imposé ; derrière un proxy, chaque visiteur a sa propre limite d’essais', async () => {
+  const t = await start({ secure: true, trustProxy: true });
+  assert.match((await fetch(t.base + '/')).headers.get('strict-transport-security'), /max-age=/);
+  const essai = (adresse, code) => fetch(t.base + '/api/join', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': adresse },
+    body: JSON.stringify({ code, pseudo: 'X' + Math.random().toString(36).slice(2, 6) }),
+  }).then(r => r.status);
+  for (let i = 0; i < 12; i++) assert.equal(await essai('1.1.1.1', 'faux'), 403);
+  assert.equal(await essai('1.1.1.1', 'faux'), 429);        // le 13e essai du même visiteur est bloqué
+  assert.equal(await essai('2.2.2.2', 'secret42'), 200);     // un autre visiteur n’est pas touché
+  await t.stop();
+});
+
+test('sans proxy de confiance, un en-tête X-Forwarded-For ne contourne pas la limite', async () => {
+  const t = await start({ secure: false, trustProxy: false });
+  const essai = adresse => fetch(t.base + '/api/join', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': adresse },
+    body: JSON.stringify({ code: 'faux', pseudo: 'Z' }),
+  }).then(r => r.status);
+  for (let i = 0; i < 12; i++) await essai('9.9.9.' + i);
+  assert.equal(await essai('8.8.8.8'), 429);
+  await t.stop();
+});

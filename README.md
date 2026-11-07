@@ -28,7 +28,40 @@ npm test
 
 9 tests du serveur (code du groupe, groupe complet, messages en direct, positions privées, « J'y vais », sécurité des fichiers).
 
-## Mettre en ligne (avec le nom de domaine)
+## Mettre en ligne sur Fly.io
+
+Fly.io garde le serveur allumé, donne l'HTTPS tout seul et a une région à Paris. La configuration est dans `fly.toml` et `Dockerfile` (non testés en vrai : le conteneur de développement n'a ni Docker ni compte Fly).
+
+À faire une fois, dans PowerShell :
+
+```powershell
+iwr https://fly.io/install.ps1 -useb | iex     # installe l'outil fly (puis rouvrir PowerShell)
+fly auth signup                                 # ou : fly auth login
+cd listen-festival-
+git pull
+fly launch --no-deploy --copy-config --name NOM-UNIQUE --region cdg
+fly volumes create listen_data --region cdg --size 1 --yes
+fly secrets set GROUP_CODE="mon-code-secret"
+fly deploy --ha=false
+fly status
+```
+
+- `NOM-UNIQUE` : le nom doit être libre chez Fly. Le site sera sur `https://NOM-UNIQUE.fly.dev`.
+- `--ha=false` est important : **une seule machine**. Avec deux, chacune aurait ses propres messages et positions.
+- Le volume `listen_data` garde les messages et les membres entre deux démarrages.
+- Le code du groupe est un secret Fly : il n'est jamais dans le dépôt.
+
+Mettre à jour après un changement : `git pull` puis `fly deploy --ha=false`.
+Voir les journaux : `fly logs`.
+
+Brancher un nom de domaine, plus tard :
+
+```powershell
+fly certs add listen.mondomaine.be
+fly certs show listen.mondomaine.be     # affiche les enregistrements DNS à créer chez le registraire
+```
+
+## Autre hébergeur
 
 Le site a besoin d'un petit serveur Node qui reste allumé, et d'**HTTPS**. Sans HTTPS, les navigateurs refusent de donner la position GPS. Les hébergeurs de type Render, Railway ou Fly.io donnent l'HTTPS tout seuls et acceptent un nom de domaine.
 
