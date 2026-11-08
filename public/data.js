@@ -54,7 +54,8 @@ const V = [
 
 const EXPRESS = { n: 'Listen Express', s: 24, e: 29 };
 
-// Les quatre gares du Listen Express et du plan. Les 3 premières sont aussi des lieux.
+// Les gares du plan. Le Listen Express s'arrête à Nord, Central et Midi ; Congrès est sur la même ligne.
+// Nord, Congrès et Central sont aussi des lieux (même position).
 const GARES = {
   nord: { id: 'g-nord', n: 'Gare du Nord', lat: 50.86038, lng: 4.36008 },
   congres: { id: 'g-congres', n: 'Gare du Congrès', lat: 50.8528, lng: 4.3623 },
@@ -62,7 +63,8 @@ const GARES = {
   midi: { id: 'g-midi', n: 'Gare du Midi', lat: 50.83595, lng: 4.33685 },
 };
 
-// Goûts de Mahx
+// Goûts de Mahx (TASTE_OWNER), montrés aux autres comme « Recos de Mahx »
+const TASTE_OWNER = 'Mahx';
 const T = {
   pick: ['MCR-T', 'CJ Bolland B2B Mary Lake', 'Avalon Emerson', 'UNOS', 'Mike Servito', 'Tiga', 'Border One'],
   check: ['Maraskino', 'Miss Bashful', 'BAVR & DC Noises', 'LAURAVIOLI', 'CYVIRA', 'Clara D', 'Malo Z', 'Otis', 'Haumea', 'tINI'],

@@ -258,3 +258,72 @@ test('le flux en direct demande de ne pas être compressé ni retenu', async () 
   assert.equal(res.headers['x-accel-buffering'], 'no');
   await t.stop();
 });
+
+test('hors ligne : un message renvoyé avec le même cid n’est pas doublé, et garde l’heure où il a été écrit', async () => {
+  const t = await start();
+  const a = await t.join('Max'), b = await t.join('Zoé');
+  const feed = await t.listen(b.body.token);
+  await t.wait(50);
+  const at = Date.now() - 10 * 60e3;
+  const r1 = await t.call('POST', '/api/msg', { text: 'On bouge ?', cid: 'abc123xyz', at }, a.body.token);
+  const r2 = await t.call('POST', '/api/msg', { text: 'On bouge ?', cid: 'abc123xyz', at }, a.body.token);
+  assert.equal(r1.status, 200); assert.equal(r2.status, 200);
+  assert.equal(r2.body.id, r1.body.id);
+  assert.equal(r1.body.t, at);
+  assert.equal(r1.body.cid, 'abc123xyz');
+  // un autre membre peut utiliser le même cid sans collision
+  const r3 = await t.call('POST', '/api/msg', { text: 'Oui', cid: 'abc123xyz' }, b.body.token);
+  assert.notEqual(r3.body.id, r1.body.id);
+  // heure absurde (futur, ou plus de 2 h) : remplacée par l’heure du serveur
+  const r4 = await t.call('POST', '/api/msg', { text: 'futur', at: Date.now() + 3600e3 }, a.body.token);
+  assert.ok(Math.abs(r4.body.t - Date.now()) < 5000);
+  await t.wait(100);
+  assert.equal(feed.events.filter(e => e.event === 'msg' && e.data.text === 'On bouge ?').length, 1);
+  feed.close(); await t.stop();
+});
+
+test('/api/me teste la session sans rien modifier ; sw.js est servi pour le hors ligne', async () => {
+  const t = await start();
+  const a = await t.join('Max');
+  await t.call('POST', '/api/stars', { stars: ['fuse|MCR-T'] }, a.body.token);
+  const me = await t.call('GET', '/api/me', undefined, a.body.token);
+  assert.equal(me.status, 200);
+  assert.deepEqual(me.body.stars, ['fuse|MCR-T']);
+  assert.equal((await t.call('GET', '/api/me')).status, 401);
+  const sw = await fetch(t.base + '/sw.js');
+  assert.equal(sw.status, 200);
+  assert.match(sw.headers.get('content-type'), /javascript/);
+  assert.equal(sw.headers.get('cache-control'), 'no-cache');
+  assert.match(sw.headers.get('content-security-policy'), /connect-src[^;]*tile\.openstreetmap\.org/);
+  await t.stop();
+});
+
+test('arrêter de partager efface la position ; après le festival, plus aucune position', async () => {
+  const t = await start();
+  const a = await t.join('Max');
+  await t.call('POST', '/api/pos', { lat: 50.846, lng: 4.357 }, a.body.token);
+  await t.call('POST', '/api/pos', { sharing: false }, a.body.token);
+  await t.call('POST', '/api/pos', { lat: 50.85, lng: 4.36 }, a.body.token);
+  const me = await t.call('GET', '/api/me', undefined, a.body.token);
+  assert.equal(me.body.pos.lat, 50.85);
+  await t.stop();
+
+  const old = await start({ purgeAt: Date.now() - 1000 });
+  const b = await old.join('Zoé');
+  assert.equal((await old.call('POST', '/api/pos', { lat: 50.846, lng: 4.357 }, b.body.token)).status, 410);
+  assert.equal((await old.call('POST', '/api/pos', { sharing: false }, b.body.token)).status, 200);
+  await old.stop();
+});
+
+test('les fichiers texte sont envoyés compressés quand le navigateur le demande', async () => {
+  const t = await start();
+  const zlib = require('node:zlib');
+  const raw = await new Promise(resolve => http.get(t.base + '/routes.json', { headers: { 'Accept-Encoding': 'gzip, br' } }, r => {
+    const chunks = []; r.on('data', c => chunks.push(c)); r.on('end', () => resolve({ headers: r.headers, body: Buffer.concat(chunks) }));
+  }));
+  assert.equal(raw.headers['content-encoding'], 'gzip');
+  const json = JSON.parse(zlib.gunzipSync(raw.body).toString('utf8'));
+  assert.ok(json.r['nord>fuse']);
+  assert.ok(raw.body.length < 120 * 1024);
+  await t.stop();
+});

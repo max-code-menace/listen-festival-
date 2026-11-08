@@ -18,7 +18,20 @@ Sans `GROUP_CODE`, le code de test est `listen`.
 
 ## Sur téléphone
 
-Le site est pensé pour le téléphone d'abord (cibles tactiles de 44 px minimum, carte pleine largeur, onglets en bas). Une fois en ligne, ouvrez-le dans Safari ou Chrome puis « Ajouter à l'écran d'accueil » : il s'ouvre en plein écran comme une appli, avec son icône.
+Le site est fait **pour le téléphone uniquement** (référence : 375 × 667). Sur ordinateur, il s'affiche en simple colonne au milieu. Une fois en ligne, ouvrez-le dans Safari ou Chrome puis « Ajouter à l'écran d'accueil » : il s'ouvre en plein écran comme une appli, avec son icône.
+
+Quatre onglets :
+
+- **Carte** : plein écran, avec un panneau qui glisse du bas (replié, moitié, plein). Toucher un lieu ouvre sa fiche : temps de marche depuis toi, heure d'arrivée, ouvert ou pas à l'arrivée. « Y aller » trace l'itinéraire, propose le Listen Express quand il fait gagner du temps, et permet de prévenir le groupe (« j'arrive dans ~8 min »).
+- **Programme** : « Maintenant » (ce qui est ouvert, trié par minutes de marche), « Line-up » (recherche, filtres, « J'y vais » en touchant la ligne), « Horaires » (frise, mon parcours d'après mes choix, Listen Express).
+- **Groupe** : statut, « faire du bruit », les potes à X min de toi, **« Se retrouver maintenant »** (le lieu le plus juste pour tout le monde), le planning de chacun.
+- **Chat** : messages, RDV, position, repère « Nouveaux messages ».
+
+**Hors ligne** : après une première ouverture avec du réseau, l'appli s'ouvre sans réseau (service worker `public/sw.js`), avec la carte des quartiers du festival (téléchargée seule, environ 200 morceaux) et tous les temps de marche entre lieux. Les messages, RDV, statuts et « J'y vais » écrits sans réseau partent tout seuls quand il revient, sans doublon.
+
+Profil (pastille en haut à droite) : allure à pied, gare de départ, **mode économie de batterie**, carte hors ligne, lien d'invitation.
+
+Pour voir l'appli « pendant » le festival : ajoutez `?now=2026-11-22T01:30:00%2B01:00` à l'adresse.
 
 ## Tester
 
@@ -26,7 +39,15 @@ Le site est pensé pour le téléphone d'abord (cibles tactiles de 44 px minimum
 npm test
 ```
 
-19 tests du serveur (code du groupe, groupe complet, messages en direct, positions privées, « J'y vais », statut, bruit, pas, mode de secours, sécurité des fichiers).
+34 tests : le serveur (code du groupe, groupe complet, messages en direct, anti-doublon hors ligne, positions privées et effacées, « J'y vais », statut, bruit, pas, mode de secours, compression, sécurité des fichiers) et les calculs du site (heures, trajets précalculés, estimation depuis le GPS, arrivée, point de rencontre, Listen Express, fichiers gardés hors ligne). GitHub lance ces tests avant chaque mise en ligne : un test qui échoue bloque le déploiement.
+
+## Recalculer les trajets
+
+Les temps de marche entre lieux sont dans `public/routes.json`, calculés une fois avec le service d'OpenStreetMap. À refaire seulement si un lieu change de place dans `public/data.js` (environ 2 minutes) :
+
+```powershell
+npm run routes
+```
 
 ## Mettre en ligne sur un hébergement mutualisé (cPanel avec « Node.js »)
 
@@ -115,15 +136,16 @@ Réglages à donner à l'hébergeur :
 
 ## Comment c'est fait
 
-- `server.js` : serveur sans aucune dépendance. Les messages, positions et « J'y vais » sont gardés dans un fichier JSON (`data/db.json`). Le temps réel passe par SSE.
-- `public/` : le site. `data.js` contient les lieux, horaires, line-ups et goûts ; `app.js` la logique ; `style.css` l'apparence ; `vendor/leaflet` la carte.
-- Fond de carte : OpenStreetMap. Itinéraires à pied : service de routage d'OpenStreetMap (`routing.openstreetmap.de`), appelé depuis le navigateur.
-- `listen-2026.html` : la première version, une page seule sans serveur.
+- `server.js` : serveur sans aucune dépendance. Les messages, positions et « J'y vais » sont gardés dans un fichier JSON (`data/db.json`). Le temps réel passe par SSE. Les fichiers texte sont envoyés compressés.
+- `public/` : le site. `data.js` contient les lieux, horaires, line-ups et goûts ; `core.js` les calculs (heures, temps de marche, arrivée, rencontre, Express) ; `app.js` l'affichage ; `routes.json` les trajets précalculés ; `sw.js` le hors ligne ; `style.css` l'apparence ; `vendor/leaflet` la carte.
+- Fond de carte : OpenStreetMap. Itinéraires : précalculés entre lieux ; depuis ta position, calculés en direct par `routing.openstreetmap.de` (repli hors ligne : trajet gardé depuis le lieu le plus proche, ou estimation).
+- `docs/SPEC.md` : le spec complet, le diagnostic et ce qu'il reste à faire.
+- `scripts/build-routes.js` : recalcule `public/routes.json`.
 
 ## Limites
 
-- Les itinéraires du site sont **à pied**. Les trains (SNCB, Listen Express) ne sont pas calculés : leurs horaires de nuit ne sont pas publiés.
-- La position se partage seulement quand la page est ouverte (les navigateurs coupent le GPS en arrière-plan). Le site demande à l'écran de rester allumé tant que le partage est actif.
+- Les itinéraires du site sont **à pied**. Le Listen Express est proposé avec une durée estimée (~10 min d'attente, ~5 min entre deux gares) : ses horaires de passage ne sont pas publiés. Pour la STIB, le taxi ou une autre appli, des liens ouvrent Google Maps / Plans / Uber.
+- La position se partage seulement quand la page est ouverte (les navigateurs coupent le GPS en arrière-plan). Le site demande à l'écran de rester allumé tant que le partage est actif. Arrêter le partage efface la position ; toutes les positions sont effacées le 23/11 (`PURGE_AT` pour changer la date).
 - Quiconque a le code peut reprendre un pseudo existant (utile si on change de téléphone, mais ce n'est pas un vrai compte). À 10 potes de confiance, c'est voulu.
 - Le fond de carte et le service d'itinéraires publics d'OpenStreetMap sont faits pour un petit usage comme celui-ci, pas pour beaucoup de monde.
 - Heures de passage par DJ non publiées ; Studio CityGate affiché « 23:00 - 23:00 » ; position de Congrès approximative.

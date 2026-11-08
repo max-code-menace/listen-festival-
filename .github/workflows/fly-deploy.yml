@@ -7,13 +7,24 @@ on:
       - main
       - master
 jobs:
-  deploy:
-    name: Deploy app
+  test:
+    name: Tests
     runs-on: ubuntu-latest
-    concurrency: deploy-group    # optional: ensure only one action runs at a time
     steps:
       - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+  deploy:
+    name: Deploy app
+    needs: test               # rien n'est mis en ligne si un test échoue
+    runs-on: ubuntu-latest
+    concurrency: deploy-group # un seul déploiement à la fois
+    steps:
+      - uses: actions/checkout@v4
+      # Version figée (1.6) : une mise à jour de l'action ne peut pas casser le déploiement à notre insu
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
       # --ha=false : une seule machine, sinon les messages et positions se dédoublent.
       - run: flyctl deploy --remote-only --ha=false
         env:

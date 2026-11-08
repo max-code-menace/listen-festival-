@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#0b0714">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Listen 26">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -23,7 +24,7 @@
 <main id="login" class="login" hidden>
   <form id="login-form" class="login-card" autocomplete="off">
     <div><span class="logo big">Listen</span><span class="yr">2026 · Bruxelles · 21 → 22 nov.</span></div>
-    <p class="mute">Le groupe, la carte et le chat, au même endroit. Entrez le code que vous a donné la personne qui a lancé le groupe.</p>
+    <p class="mute">Le groupe, la carte et le chat, au même endroit. Entre le code que t'a donné la personne qui a lancé le groupe.</p>
     <div class="field"><label class="label" for="in-code">Code du groupe</label><input id="in-code" name="code" type="text" required autocapitalize="off" autocorrect="off" spellcheck="false"></div>
     <div class="field"><label class="label" for="in-pseudo">Ton pseudo</label><input id="in-pseudo" name="pseudo" type="text" required maxlength="16" autocomplete="nickname"></div>
     <div class="field"><span class="label" id="color-l">Ta couleur sur la carte</span><div class="swatches" id="swatches" role="radiogroup" aria-labelledby="color-l"></div></div>
@@ -35,144 +36,159 @@
 <!-- Application -->
 <div id="app" hidden>
   <header class="bar">
-    <div class="brand"><span class="logo">Listen</span><span class="yr">2026 · Bruxelles</span></div>
+    <div class="brand"><span class="logo">Listen</span></div>
     <div class="bar-right">
-      <span class="status" id="conn" title="Connexion au groupe"><i></i><span id="conn-txt">Connexion…</span></span>
-      <div class="count"><b id="countdown">J-…</b><span>21 → 22 nov.</span></div>
-      <button class="me-chip" id="me-chip" type="button" aria-haspopup="dialog"></button>
+      <span class="status" id="conn" title="Connexion au groupe"><i></i><span id="conn-txt" class="sr">Connexion…</span></span>
+      <div class="count"><b id="countdown">J-…</b><span id="count-sub">21 → 22 nov.</span></div>
+      <button class="me-chip" id="me-chip" type="button" aria-haspopup="dialog" aria-label="Mon profil"></button>
     </div>
   </header>
+  <p class="offline" id="offline" role="status" hidden></p>
 
-  <main>
-    <!-- CARTE -->
-    <section class="view" id="v-carte" data-view="carte">
-      <div class="map-wrap">
-        <div id="map" role="application" aria-label="Carte des lieux et de vos potes"></div>
-        <div class="map-ctl">
-          <div class="chips" id="zoom" role="group" aria-label="Zoom"></div>
+  <!-- CARTE : plein écran, avec un panneau qui glisse du bas -->
+  <section class="view v-carte" id="v-carte" data-view="carte">
+    <div id="map" role="application" aria-label="Carte des lieux et de vos potes"></div>
+    <div class="map-top"><div class="chips scroll-row" id="zoom" role="group" aria-label="Zoom"></div></div>
+    <div class="map-fab">
+      <button class="fab" id="btn-locate" type="button" aria-label="Me centrer sur la carte">Moi</button>
+      <button class="fab" id="btn-fit" type="button" aria-label="Voir tout le groupe">Tous</button>
+      <button class="fab" id="btn-rdv" type="button" aria-pressed="false" aria-label="Poser un point de rendez-vous">RDV</button>
+    </div>
+    <p class="map-hint" id="map-hint" hidden></p>
+
+    <section class="sheet" id="sheet" data-snap="min" aria-label="Détails">
+      <div class="sheet-top" id="sheet-top">
+        <div class="grab" aria-hidden="true"></div>
+        <div class="sheet-head">
+          <button class="share" id="btn-share" type="button" aria-pressed="false"></button>
+          <button class="sum" id="sheet-sum" type="button" aria-label="Ouvrir le panneau"></button>
         </div>
-        <div class="map-share">
-          <button class="chip big" id="btn-share" type="button" aria-pressed="false">Partager ma position</button>
-        </div>
-        <div class="map-fab">
-          <button class="fab" id="btn-locate" type="button" aria-label="Me centrer sur la carte">Moi</button>
-          <button class="fab" id="btn-fit" type="button" aria-label="Voir tout le groupe">Tous</button>
-          <button class="fab" id="btn-rdv" type="button" aria-pressed="false" aria-label="Poser un point de rendez-vous">RDV</button>
-        </div>
-        <p class="map-hint" id="map-hint" hidden></p>
       </div>
-      <div class="duo">
-        <div class="stack">
-          <section class="card" aria-labelledby="potes-t">
-            <div class="card-head"><h3 id="potes-t">Les potes</h3><span class="mute small" id="potes-n"></span></div>
-            <ul class="potes" id="potes"></ul>
-            <p class="walker small" id="walker" hidden></p>
-            <div class="status-row">
-              <span class="label" id="st-l">Mon statut</span>
-              <div class="chips" id="status-chips" role="group" aria-labelledby="st-l"></div>
-            </div>
-            <button class="btn main boom" id="btn-boom" type="button">Faire du bruit</button>
-          </section>
-          <form class="card rdv-form" id="rdv-form" hidden>
-            <h3>Point de rendez-vous</h3>
-            <div class="field"><label class="label" for="rdv-txt">Nom du rendez-vous</label><input id="rdv-txt" type="text" maxlength="60" value="RDV ici"></div>
-            <div class="links"><button class="btn main" type="submit">Envoyer au groupe</button><button class="btn" type="button" id="rdv-cancel">Annuler</button></div>
-          </form>
-        </div>
-        <div class="stack">
-          <article class="card venue" id="venue" aria-live="polite"></article>
-          <section class="card" id="route-card" aria-labelledby="route-t">
-            <div class="card-head"><h3 id="route-t">Itinéraire à pied</h3><span class="mute small">calculé dans le site</span></div>
-            <div class="route-form">
-              <div class="field"><label class="label" for="r-from">De</label><select id="r-from"></select></div>
-              <div class="field"><label class="label" for="r-to">Vers</label><select id="r-to"></select></div>
-              <button class="btn main" id="r-go" type="button">Calculer</button>
-            </div>
-            <div id="route-out" aria-live="polite"></div>
-          </section>
-        </div>
+      <div class="sheet-body" id="sheet-body">
+        <form class="rdv-form" id="rdv-form" hidden>
+          <h3>Point de rendez-vous</h3>
+          <div class="field"><label class="label" for="rdv-txt">Nom du rendez-vous</label><input id="rdv-txt" type="text" maxlength="60" value="RDV ici"></div>
+          <div class="links"><button class="btn main" type="submit">Envoyer au groupe</button><button class="btn" type="button" id="rdv-cancel">Annuler</button></div>
+        </form>
+        <div id="route" hidden></div>
+        <article class="venue" id="venue" aria-live="polite"></article>
       </div>
     </section>
+  </section>
 
-    <!-- PLAN -->
-    <section class="view" id="v-plan" data-view="plan" hidden>
-      <div class="sec-head"><h2>Qui ouvre quand</h2><p class="mute">Touchez un lieu pour le voir sur la carte. Glissez pour voir toute la nuit.</p></div>
-      <div class="scroll-x"><div class="frise" id="frise-grid"></div></div>
+  <!-- PROGRAMME -->
+  <section class="view v-prog" id="v-prog" data-view="prog" hidden>
+    <div class="seg seg-top" id="prog-seg" role="group" aria-label="Programme">
+      <button type="button" data-p="now" aria-pressed="true">Maintenant</button>
+      <button type="button" data-p="lineup" aria-pressed="false">Line-up</button>
+      <button type="button" data-p="hours" aria-pressed="false">Horaires</button>
+    </div>
+
+    <div class="pane" id="p-now"></div>
+
+    <div class="pane" id="p-lineup" hidden>
+      <div class="lu-tools">
+        <label class="sr" for="lu-q">Chercher un DJ ou un lieu</label>
+        <input id="lu-q" type="search" placeholder="Chercher un DJ ou un lieu" autocomplete="off" enterkeyhint="search">
+        <div class="chips scroll-row" id="filter" role="group" aria-label="Filtrer le line-up"></div>
+      </div>
+      <p class="mute small" id="lu-note">Heures de passage des DJ pas encore publiées : seul l'horaire du lieu est connu. Touche une ligne pour dire « J'y vais ».</p>
+      <div id="lu"></div>
+    </div>
+
+    <div class="pane" id="p-hours" hidden>
+      <div class="sec-head"><h2>Qui ouvre quand</h2><span class="mute small">touche un lieu pour le voir sur la carte</span></div>
+      <ol class="tl" id="timeline"></ol>
       <div class="fr-legend">
         <span><i class="sw k-club"></i>Club de nuit</span>
-        <span><i class="sw k-jour"></i>Club, ouvert en journée</span>
-        <span><i class="sw k-disq"></i>Disquaire (Vedett LISTENing Sessions)</span>
+        <span><i class="sw k-jour"></i>Ouvert en journée</span>
+        <span><i class="sw k-disq"></i>Disquaire</span>
         <span><i class="sw k-rail"></i>Listen Express</span>
         <span><i class="sw k-tbc"></i>Fin à confirmer</span>
-        <span><i class="sw" style="box-shadow:0 0 0 2px var(--fg)"></i>Étape du parcours</span>
       </div>
 
-      <div class="sec-head" style="margin-top:36px"><h2>Parcours proposé</h2><p class="mute">Hexagon → Nord → train → Fuse</p></div>
-      <div class="field"><label class="label" for="depart">Ta gare de départ</label><input id="depart" type="text" autocomplete="off" value="Gare de Mont-Saint-Guibert"></div>
-      <ol class="steps" id="steps"></ol>
-      <p class="aside" id="hors-parcours"></p>
+      <div class="sec-head"><h2>Mon parcours</h2><span class="mute small">d'après tes « J'y vais »</span></div>
+      <ol class="steps" id="myplan"></ol>
 
-      <div class="sec-head" style="margin-top:36px"><h2>Listen Express</h2></div>
-      <div class="express">
+      <details class="card fold" id="mahx-route">
+        <summary><h3 id="mahx-route-t">Le parcours de Mahx</h3><span class="mute small">Hexagon → Nord → train → Fuse</span></summary>
+        <ol class="steps" id="steps"></ol>
+        <p class="aside" id="hors-parcours"></p>
+      </details>
+
+      <section class="express card">
+        <div class="card-head"><h3>Listen Express</h3><span class="mute small" id="express-when"></span></div>
         <div class="stations" aria-label="Gares desservies"><span>Nord</span><i></i><span>Central</span><i></i><span>Midi</span></div>
         <div class="facts">
-          <div><span class="label">Quand</span><span class="mono">dim. 00:00 → 05:00</span></div>
+          <div><span class="label">Quand</span><span>dim. 00:00 → 05:00</span></div>
           <div><span class="label">Aux platines</span><span>O'SIMMIE, LOV, Vera Moro</span></div>
           <div><span class="label">Billet</span><span>Inclus dans le billet du festival</span></div>
-          <div><span class="label">Horaire des passages</span><span>Pas encore publié</span></div>
+          <div><span class="label">Passages</span><span>Horaire pas encore publié</span></div>
         </div>
-        <p>Une voiture devient une piste de danse, avec un bar, entre les trois gares. Étape 3 du parcours : monter à Nord vers minuit, descendre à Midi.</p>
-      </div>
+        <p class="small mute">Une voiture devient une piste de danse, avec un bar, entre les trois gares. Les durées « par le train » de l'appli supposent ~10 min d'attente et ~5 min entre deux gares.</p>
+      </section>
 
-      <div class="sec-head" style="margin-top:36px"><h2>Limites connues</h2></div>
-      <ul class="plain">
-        <li>Les heures de passage par DJ ne sont pas publiées : le plan est calé sur les horaires des lieux.</li>
-        <li>Studio CityGate &amp; La Fabriek est affiché « 23:00 - 23:00 » sur le site : barre hachurée jusqu'à la fin, à confirmer.</li>
-        <li>Les itinéraires du site sont à pied. Les trains (SNCB, Listen Express) ne sont pas calculés : leurs horaires de nuit ne sont pas vérifiés.</li>
-        <li>Congrès Station : position approximative. Les autres lieux viennent d'OpenStreetMap.</li>
-        <li>Billets : Resident Advisor les affichait épuisés. Billetterie officielle : <a href="https://feverup.com/m/742369/en" target="_blank" rel="noopener">Fever</a>.</li>
-        <li>Aucun de tes artistes préférés (Part Time Killer, David Löhlein, Schrotagen, Miss Hluft, Elon Bass, Nio Teck, Jacidorex, NoImage) n'est à l'affiche.</li>
-      </ul>
-      <p class="mute small">Source : listenfestival.be, relevé du 07/11/2026. Fond de carte et itinéraires : © contributeurs OpenStreetMap.</p>
+      <details class="card fold">
+        <summary><h3>À savoir</h3></summary>
+        <ul class="plain">
+          <li>Les heures de passage par DJ ne sont pas publiées : le plan est calé sur les horaires des lieux.</li>
+          <li>Studio CityGate &amp; La Fabriek est affiché « 23:00 - 23:00 » sur le site : fin à confirmer.</li>
+          <li>Temps de marche : calculés d'avance entre les lieux (OpenStreetMap), puis ajustés à ton allure (profil). Depuis ta position, c'est une estimation (≈).</li>
+          <li>Ta position n'est visible que par le groupe, pendant que tu partages. Arrêter le partage l'efface, et toutes les positions sont effacées le lundi 23/11.</li>
+          <li>Congrès Station : position approximative. Les autres lieux viennent d'OpenStreetMap.</li>
+          <li>Billets : Resident Advisor les affichait épuisés. Billetterie officielle : <a href="https://feverup.com/m/742369/en" target="_blank" rel="noopener">Fever</a>.</li>
+          <li id="owner-only" hidden>Aucun de tes artistes préférés (Part Time Killer, David Löhlein, Schrotagen, Miss Hluft, Elon Bass, Nio Teck, Jacidorex, NoImage) n'est à l'affiche.</li>
+        </ul>
+        <p class="mute small">Source : listenfestival.be, relevé du 07/11/2026. Fond de carte et itinéraires : © contributeurs OpenStreetMap.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- GROUPE -->
+  <section class="view v-groupe" id="v-groupe" data-view="groupe" hidden>
+    <section class="card" aria-labelledby="st-l">
+      <div class="card-head"><h3 id="st-l">Mon statut</h3><span class="mute small">s'efface après 1 h 30</span></div>
+      <div class="chips status-chips" id="status-chips" role="group" aria-labelledby="st-l"></div>
+      <button class="btn main boom" id="btn-boom" type="button">Faire du bruit</button>
     </section>
 
-    <!-- LINE-UP -->
-    <section class="view" id="v-lineup" data-view="lineup" hidden>
-      <div class="sec-head"><h2>Line-up</h2></div>
-      <div class="seg" role="group" aria-label="Affichage du line-up" id="lu-mode">
-        <button type="button" data-m="lieux" aria-pressed="true">Par lieu</button>
-        <button type="button" data-m="potes" aria-pressed="false">Par pote</button>
-      </div>
-      <div class="lu-wrap" id="lu-lieux">
-        <div class="seg" role="group" aria-label="Filtrer le line-up" id="filter">
-          <button type="button" data-f="all" aria-pressed="true">Tout</button>
-          <button type="button" data-f="gouts" aria-pressed="false">Mes goûts</button>
-          <button type="button" data-f="stars" aria-pressed="false">J'y vais</button>
-          <button type="button" data-f="crew" aria-pressed="false">Le groupe</button>
-        </div>
-        <p class="mute">Les heures de passage de chaque DJ ne sont pas encore publiées : seul l'horaire du lieu est connu. Les pastilles de couleur montrent qui du groupe y va.</p>
-        <div class="lu-grid" id="lu"></div>
-      </div>
-      <div class="lu-grid" id="lu-potes" hidden></div>
+    <section class="card" aria-labelledby="potes-t">
+      <div class="card-head"><h3 id="potes-t">Les potes</h3><span class="mute small" id="potes-n"></span></div>
+      <ul class="potes" id="potes"></ul>
+      <p class="walker small" id="walker" hidden></p>
     </section>
 
-    <!-- CHAT -->
-    <section class="view chat" id="v-chat" data-view="chat" hidden>
-      <ol class="msgs" id="msgs" aria-live="polite"></ol>
-      <div class="quick" id="quick"></div>
-      <form class="composer" id="composer" autocomplete="off">
-        <label class="sr" for="msg-in">Message pour le groupe</label>
-        <input id="msg-in" type="text" maxlength="400" placeholder="Un message pour le groupe…" enterkeyhint="send">
-        <button class="send" type="submit" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-      </form>
+    <section class="card" aria-labelledby="meet-t">
+      <div class="card-head"><h3 id="meet-t">Se retrouver maintenant</h3><span class="mute small">le lieu le plus juste pour tous</span></div>
+      <div id="meet-now"></div>
     </section>
-  </main>
+
+    <section class="card meet" aria-labelledby="plan-meet-t">
+      <div class="card-head"><h3 id="plan-meet-t">Où vous vous retrouvez</h3><span class="mute small">d'après les « J'y vais »</span></div>
+      <div id="meet-plan"></div>
+    </section>
+
+    <div class="sec-head"><h2>Le planning de chacun</h2></div>
+    <div class="plans" id="plans"></div>
+  </section>
+
+  <!-- CHAT -->
+  <section class="view chat" id="v-chat" data-view="chat" hidden>
+    <ol class="msgs" id="msgs" aria-live="polite"></ol>
+    <button class="jump" id="jump" type="button" hidden></button>
+    <div class="quick scroll-row" id="quick"></div>
+    <form class="composer" id="composer" autocomplete="off">
+      <label class="sr" for="msg-in">Message pour le groupe</label>
+      <input id="msg-in" type="text" maxlength="400" placeholder="Un message pour le groupe…" enterkeyhint="send">
+      <button class="send" type="submit" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </form>
+  </section>
 
   <nav class="tabs" aria-label="Sections">
     <i class="ind" aria-hidden="true"></i>
     <button type="button" data-tab="carte" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Carte</button>
-    <button type="button" data-tab="plan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M4 12h14M4 17h7"/></svg>Plan</button>
-    <button type="button" data-tab="lineup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Line-up</button>
+    <button type="button" data-tab="prog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Programme</button>
+    <button type="button" data-tab="groupe"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.6 3-5.6 6-5.6s5.4 2 6 5.6"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.5c2.3.3 3.9 2 4.5 5"/></svg>Groupe<b class="badge alert" id="badge-g" hidden>!</b></button>
     <button type="button" data-tab="chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/></svg>Chat<b class="badge" id="badge" hidden>0</b></button>
   </nav>
 
@@ -181,8 +197,13 @@
       <h3 id="me-name"></h3>
       <p class="mute small" id="me-info"></p>
       <p class="small" id="me-km"></p>
+      <div class="field"><label class="label" for="me-pace">Ton allure à pied</label><select id="me-pace"></select></div>
+      <div class="field"><label class="label" for="depart">Ta gare (aller et retour)</label><input id="depart" type="text" autocomplete="off" value="Gare de Mont-Saint-Guibert"></div>
+      <label class="toggle"><input type="checkbox" id="me-eco"><span><b>Mode économie de batterie</b><br><span class="mute small">Pas d'animations ni de flous, position envoyée moins souvent. S'active seul sous 20 % quand le téléphone le permet.</span></span></label>
+      <p class="small mute" id="me-offline"></p>
       <div class="links">
         <button class="btn main" id="me-invite" type="button">Copier le lien d'invitation</button>
+        <button class="btn" id="me-tiles" type="button">Télécharger la carte hors ligne</button>
         <button class="btn" id="me-leave" type="button">Quitter le groupe</button>
         <button class="btn" value="close">Fermer</button>
       </div>
@@ -194,6 +215,7 @@
 
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/data.js"></script>
+<script src="/core.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
