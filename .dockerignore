@@ -2,7 +2,10 @@
 node_modules
 data
 test
+scripts
+docs
+.claude
+.github
 README.md
-listen-2026.html
 Dockerfile
 fly.toml

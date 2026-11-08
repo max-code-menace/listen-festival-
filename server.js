@@ -7,6 +7,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 
 const COLORS = ['#f5b800', '#57c4d1', '#ff6b6b', '#7bd36b', '#c08bff', '#ff9f4a', '#4f8dff', '#ff7ac6', '#b8c23a', '#e8e8e8'];
 // Statuts rapides : doit rester identique à STATUS dans public/data.js (un test le vérifie)
@@ -17,13 +18,15 @@ const MIME = {
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json',
 };
+const COMPRESS = new Set(['.html', '.js', '.css', '.json', '.svg', '.webmanifest']);
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
   "img-src 'self' data: https://tile.openstreetmap.org",
-  "connect-src 'self' https://routing.openstreetmap.de",
+  // Le service worker (sw.js) va lui-même chercher tuiles, polices et itinéraires pour les garder hors ligne
+  "connect-src 'self' https://routing.openstreetmap.de https://tile.openstreetmap.org https://fonts.googleapis.com https://fonts.gstatic.com",
   "frame-ancestors 'none'",
   "base-uri 'none'",
 ].join('; ');
@@ -42,6 +45,7 @@ function createApp(opts = {}) {
   const trustProxy = opts.trustProxy ?? process.env.TRUST_PROXY === '1';
   const secure = opts.secure ?? process.env.NODE_ENV === 'production';
   const publicDir = path.join(__dirname, 'public');
+  const gz = new Map(); // fichiers déjà compressés
   const codeHash = sha(code.toLowerCase());
 
   // ---------- Base : un simple fichier JSON, largement suffisant pour 10 personnes ----------
@@ -63,6 +67,20 @@ function createApp(opts = {}) {
       fs.renameSync(tmp, dataFile);
     } catch (e) { console.error('Sauvegarde impossible :', e.message); }
   }
+
+  // ---------- Vie privée : après le festival, plus aucune position gardée ----------
+  // PURGE_AT (date ISO) : par défaut lundi 23/11/2026 13:00 à Bruxelles. Les messages restent (souvenirs).
+  const purgeAt = opts.purgeAt ?? (Date.parse(process.env.PURGE_AT || '') || Date.UTC(2026, 10, 23, 12));
+  function purge() {
+    if (now() < purgeAt) return false;
+    let changed = false;
+    for (const m of Object.values(db.members)) if (m.pos || m.sharing || m.status) { m.pos = null; m.sharing = false; m.status = null; changed = true; }
+    if (changed) save();
+    return changed;
+  }
+  purge();
+  const purgeTimer = setInterval(() => { if (purge()) for (const m of Object.values(db.members)) announce(m); }, 3600e3);
+  purgeTimer.unref?.();
 
   // ---------- Clients connectés (SSE) ----------
   const streams = new Map(); // memberId -> Set(res)
@@ -191,7 +209,9 @@ function createApp(opts = {}) {
     if (route === 'POST /api/pos') {
       if (limited('pos:' + me.id, 90, 60e3)) return fail(res, 429, 'Trop de positions envoyées.');
       const b = await body(req);
-      if (b.sharing === false) { me.sharing = false; save(); announce(me); return json(res, 200, { ok: true }); }
+      if (now() >= purgeAt && b.sharing !== false) return fail(res, 410, 'Le festival est fini : le partage de position est fermé.');
+      // Arrêter de partager efface la position (elle n'est plus gardée sur le disque)
+      if (b.sharing === false) { me.sharing = false; me.pos = null; save(); announce(me); return json(res, 200, { ok: true }); }
       if (!num(b.lat, -90, 90) || !num(b.lng, -180, 180)) return fail(res, 400, 'Position invalide.');
       me.pos = { lat: b.lat, lng: b.lng, acc: num(b.acc, 0, 100000) ? Math.round(b.acc) : null, t: now() };
       me.sharing = true;
@@ -200,13 +220,26 @@ function createApp(opts = {}) {
       return json(res, 200, { ok: true });
     }
 
+    // Pour tester la session sans rien modifier (reconnexion)
+    if (route === 'GET /api/me') return json(res, 200, view(me));
+
     if (route === 'POST /api/msg') {
-      if (limited('msg:' + me.id, 25, 60e3)) return fail(res, 429, 'Doucement, trop de messages.');
       const b = await body(req);
+      // cid : identifiant choisi par le téléphone. Un message renvoyé après une coupure de réseau
+      // (le premier envoi était peut-être arrivé) n'est pas compté deux fois.
+      const cid = typeof b.cid === 'string' && /^[\w-]{6,40}$/.test(b.cid) ? b.cid : null;
+      if (cid) {
+        const dup = db.messages.find(x => x.from === me.id && x.cid === cid);
+        if (dup) return json(res, 200, dup);
+      }
+      if (limited('msg:' + me.id, 25, 60e3)) return fail(res, 429, 'Doucement, trop de messages.');
       const text = clean(b.text, 400);
       const kind = ['text', 'rdv', 'here'].includes(b.kind) ? b.kind : 'text';
       if (!text) return fail(res, 400, 'Message vide.');
       const extra = {};
+      if (cid) extra.cid = cid;
+      // Écrit hors ligne : on garde l'heure où il a été écrit (2 h maximum en arrière, jamais dans le futur)
+      if (num(b.at, now() - 2 * 3600e3, now())) extra.t = Math.round(b.at);
       if (kind === 'rdv' || kind === 'here') {
         if (!num(b.lat, -90, 90) || !num(b.lng, -180, 180)) return fail(res, 400, 'Point de rendez-vous invalide.');
         extra.lat = b.lat; extra.lng = b.lng;
@@ -215,6 +248,7 @@ function createApp(opts = {}) {
     }
 
     if (route === 'POST /api/stars') {
+      if (limited('stars:' + me.id, 60, 60e3)) return fail(res, 429, 'Trop de changements.');
       const b = await body(req);
       if (!Array.isArray(b.stars) || b.stars.length > 300) return fail(res, 400, 'Liste invalide.');
       me.stars = [...new Set(b.stars.filter(s => typeof s === 'string' && s.length <= 120))];
@@ -263,10 +297,18 @@ function createApp(opts = {}) {
     fs.readFile(file, (err, data) => {
       if (err) return fail(res, 404, 'Page introuvable.');
       const ext = path.extname(file).toLowerCase();
-      res.writeHead(200, {
+      const headers = {
         'Content-Type': MIME[ext] || 'application/octet-stream',
         'Cache-Control': rel.startsWith('/vendor/') ? 'public, max-age=86400' : 'no-cache',
-      });
+        Vary: 'Accept-Encoding',
+      };
+      // Texte compressé (routes.json : 243 ko → ~70 ko), gardé en mémoire tant que le fichier ne change pas
+      if (COMPRESS.has(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '') && data.length > 1024) {
+        const key = file + ':' + data.length + ':' + crypto.createHash('sha1').update(data).digest('hex');
+        if (!gz.has(key)) gz.set(key, zlib.gzipSync(data, { level: 9 }));
+        data = gz.get(key); headers['Content-Encoding'] = 'gzip';
+      }
+      res.writeHead(200, headers);
       res.end(req.method === 'HEAD' ? undefined : data);
     });
   }
